@@ -1,7 +1,7 @@
 /* FullPage Studio - background service worker.
  * Captures (visible or full-page frames) and persists the result to
- * chrome.storage.local so the Studio tab can load + stitch it.
- * No external APIs, no keys. */
+ * chrome.storage.local. The popup renders the result inline; the Studio is
+ * opened only when the user chooses to. No external APIs, no keys. */
 
 const CAP_KEY = 'fp_last_capture';
 const SETTINGS_KEY = 'fp_settings';
@@ -13,14 +13,13 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Keyboard shortcuts capture and open the popup result implicitly by storing
+// the capture; the user re-opens the toolbar popup to see it. (No auto tab.)
 chrome.commands.onCommand.addListener(async (command) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id) return;
   const mode = command === 'capture-full-page' ? 'full' : 'visible';
-  try {
-    await runCapture({ mode, tabId: tab.id });
-    chrome.tabs.create({ url: chrome.runtime.getURL('studio.html') });
-  } catch (e) { /* ignore */ }
+  try { await runCapture({ mode, tabId: tab.id }); } catch (e) { /* ignore */ }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -34,11 +33,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
-function send(tabId, msg) {
-  return new Promise((resolve) => {
-    chrome.tabs.sendMessage(tabId, msg, (res) => { void chrome.runtime.lastError; resolve(res); });
-  });
-}
+function send(tabId, msg) { return new Promise((resolve) => { chrome.tabs.sendMessage(tabId, msg, (res) => { void chrome.runtime.lastError; resolve(res); }); }); }
 async function ensureContentScript(tabId) {
   const ping = await send(tabId, { type: 'fp:ping' });
   if (ping && ping.ok) return;
@@ -61,7 +56,7 @@ async function runCapture({ mode, tabId }) {
     let y = 0, n = 0;
     while (y < info.totalHeight && n < maxFrames) {
       await send(tabId, { type: 'fp:scrollTo', y });
-      await wait(380); // let lazy content settle + respect capture rate limit
+      await wait(380);
       const dataUrl = await captureVisible(tab.windowId);
       frames.push({ dataUrl, scrollY: y });
       if (y + info.viewportHeight >= info.totalHeight) break;
@@ -76,9 +71,7 @@ async function runCapture({ mode, tabId }) {
   const capture = {
     id: Date.now(),
     createdAt: new Date().toISOString(),
-    mode,
-    frames,
-    page: info,
+    mode, frames, page: info,
     tab: { id: tab.id, title: tab.title, url: tab.url },
     metadata
   };
