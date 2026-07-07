@@ -3,21 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FullPage Studio</title>
+  <title>SnapScroll Studio</title>
   <link rel="stylesheet" href="studio.css" />
+  <style>
+    .eq-list { max-height:220px; overflow:auto; border:1px solid var(--border-subtle); border-radius:10px; padding:8px; margin:8px 0; }
+    .eq { padding:8px; border-radius:8px; }
+    .eq + .eq { border-top:1px solid var(--border-subtle); }
+    .eq .tag { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+    .eq code { display:block; font-family:'Courier New',monospace; font-size:12px; color:var(--text-primary); white-space:pre-wrap; margin-top:3px; }
+    .ai-hint { font-size:12px; color:var(--text-secondary); line-height:1.6; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; background:rgba(99,102,241,.2); color:#c7d2fe; margin-left:6px; }
+  </style>
 </head>
 <body>
   <div id="app">
     <header class="topbar">
       <div class="brand">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="url(#bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="bg" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
-        <span>FullPage <b>Studio</b></span>
+        <span>SnapScroll <b>Studio</b></span>
       </div>
       <div class="top-actions">
         <button id="btn-open" class="tbtn">Open</button>
         <button id="btn-paste" class="tbtn">Paste</button>
-        <button id="btn-eq" class="tbtn accent">∑ Equations</button>
-        <button id="btn-aiprompt" class="tbtn">Copy AI prompt</button>
+        <button id="btn-ai" class="tbtn accent">✨ Make AI-Readable</button>
         <div class="dropdown">
           <button id="btn-export" class="tbtn">Export ▾</button>
           <div class="menu" id="export-menu" hidden>
@@ -27,7 +35,6 @@
             <button data-exp="pdf">PDF document</button>
           </div>
         </div>
-        <button id="btn-segments" class="tbtn">Export segments</button>
         <button id="btn-copy" class="tbtn">Copy</button>
         <button id="btn-settings" class="tbtn icon" title="Settings">⚙</button>
       </div>
@@ -51,8 +58,8 @@
         <div id="empty" class="empty">
           <div class="empty-card">
             <div class="empty-icon">🖼️</div>
-            <h2>No capture loaded</h2>
-            <p>Capture a page from the extension popup, or drop / paste / open an image here.</p>
+            <h2>Drop an image or PDF here</h2>
+            <p>Or paste from clipboard, or open a file. Captures from SnapScroll load here automatically.</p>
             <div class="empty-actions">
               <button id="empty-open" class="btn primary">Open file</button>
               <button id="empty-paste" class="btn">Paste</button>
@@ -70,23 +77,18 @@
 
       <aside class="options">
         <section class="opt-group">
-          <h3>Smart math layer</h3>
-          <p class="hint" id="math-summary">No capture loaded.</p>
-          <button id="btn-eq2" class="btn wide">View equations</button>
-        </section>
-
-        <section class="opt-group">
           <h3>History</h3>
-          <div class="row"><button id="btn-undo" class="btn">↶ Undo</button><button id="btn-redo" class="btn">Redo ↷</button></div>
+          <div class="row">
+            <button id="btn-undo" class="btn">↶ Undo</button>
+            <button id="btn-redo" class="btn">Redo ↷</button>
+          </div>
         </section>
-
         <section class="opt-group">
           <h3>Transform</h3>
           <div class="row"><button id="btn-rotl" class="btn">↺ 90°</button><button id="btn-rotr" class="btn">90° ↻</button></div>
           <div class="row"><button id="btn-fliph" class="btn">Flip H</button><button id="btn-flipv" class="btn">Flip V</button></div>
           <button id="btn-resize" class="btn wide">Resize…</button>
         </section>
-
         <section class="opt-group" id="grp-crop" hidden>
           <h3>Crop</h3>
           <div class="chips">
@@ -99,7 +101,6 @@
           </div>
           <div class="row"><button id="btn-crop-apply" class="btn primary">Apply crop</button><button id="btn-crop-cancel" class="btn">Cancel</button></div>
         </section>
-
         <section class="opt-group" id="grp-draw" hidden>
           <h3>Style</h3>
           <label class="field"><span>Stroke</span><input type="color" id="opt-stroke" value="#ef4444" /></label>
@@ -107,7 +108,6 @@
           <label class="field checkbox"><input type="checkbox" id="opt-fill" /><span>Fill shape</span></label>
           <label class="field"><span>Fill color</span><input type="color" id="opt-fillcolor" value="#6366f1" /></label>
         </section>
-
         <section class="opt-group" id="grp-text" hidden>
           <h3>Text</h3>
           <label class="field"><span>Font</span>
@@ -123,7 +123,7 @@
           <label class="field"><span>Color</span><input type="color" id="opt-textcolor" value="#ffffff" /></label>
           <label class="field checkbox"><input type="checkbox" id="opt-bold" /><span>Bold</span></label>
           <label class="field checkbox"><input type="checkbox" id="opt-textbg" /><span>Background</span></label>
-          <p class="hint">Pick Text, click the image, type, then Apply.</p>
+          <p class="hint">Pick the Text tool, click on the image, type, then Apply.</p>
           <div class="row"><button id="btn-text-apply" class="btn primary">Apply text</button><button id="btn-text-cancel" class="btn">Cancel</button></div>
         </section>
       </aside>
@@ -132,6 +132,7 @@
     <footer class="statusbar">
       <span id="status-tool">Move</span>
       <span id="status-dims">—</span>
+      <span id="status-math"></span>
       <div class="zoom">
         <button id="btn-fit" class="mini">Fit</button>
         <button id="btn-100" class="mini">100%</button>
@@ -141,25 +142,26 @@
     </footer>
   </div>
 
-  <div id="eq-modal" class="modal" hidden>
+  <!-- AI-Readable modal -->
+  <div id="ai-modal" class="modal" hidden>
     <div class="modal-card wide">
-      <div class="modal-head"><h2>∑ Equations extracted from the page</h2><button class="x" data-close="eq-modal">✕</button></div>
-      <p class="hint" id="eq-intro">These came straight from the page's HTML math markup (MathML / LaTeX). No image guessing, no API. Hand them to your AI alongside the screenshot.</p>
-      <div id="eq-empty" hidden><p class="hint">No machine-readable equations were found in this page's markup. Use <b>Export segments</b> so the AI sees each equation at full size.</p></div>
-      <div id="eq-body" hidden>
-        <label class="lbl">LaTeX</label>
-        <textarea id="eq-latex" rows="6" readonly></textarea>
-        <label class="lbl">Plain text</label>
-        <textarea id="eq-text" rows="5" readonly></textarea>
-        <div class="row">
-          <button id="eq-copy-prompt" class="btn primary">Copy as AI prompt</button>
-          <button id="eq-copy-latex" class="btn">Copy LaTeX</button>
-          <button id="eq-copy-text" class="btn">Copy text</button>
-        </div>
+      <div class="modal-head"><h2>✨ Make AI-Readable <span id="ai-badge" class="badge">0 equations</span></h2><button class="x" data-close="ai-modal">✕</button></div>
+      <p class="ai-hint">Two things make your capture readable to any AI, with no API key and no limits:</p>
+      <ol class="ai-hint" style="margin:8px 0 12px 18px">
+        <li><b>Equation transcript</b> — the real math text pulled straight from the page (LaTeX/MathML), so the AI reads exact equations instead of guessing from pixels.</li>
+        <li><b>Readable slices</b> — tall captures get cut into page-size tiles so the AI never has to zoom.</li>
+      </ol>
+      <div id="ai-eqs" class="eq-list"></div>
+      <label class="lbl">Copy-ready transcript (paste this with your image into any AI)</label>
+      <textarea id="ai-text" rows="6" readonly></textarea>
+      <div class="row">
+        <button id="ai-copy" class="btn primary">Copy transcript</button>
+        <button id="ai-slices" class="btn">Export readable slices + transcript</button>
       </div>
     </div>
   </div>
 
+  <!-- Resize modal -->
   <div id="resize-modal" class="modal" hidden>
     <div class="modal-card">
       <div class="modal-head"><h2>Resize</h2><button class="x" data-close="resize-modal">✕</button></div>
@@ -173,7 +175,6 @@
   <input type="file" id="file-input" accept="image/*" hidden />
   <div id="toast" class="toast" hidden></div>
 
-  <script src="ocr.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>
