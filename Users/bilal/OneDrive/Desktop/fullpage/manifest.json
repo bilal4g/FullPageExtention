@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "SnapScroll Pro",
-  "version": "1.5.0",
-  "description": "Full-page capture with a pro editing Studio and AI-readable math (no API key, fully offline).",
+  "version": "1.4.0",
+  "description": "Full-page capture with a pro editing Studio and AI-ready high-res export so any AI can read your math.",
   "permissions": ["activeTab", "scripting", "tabs", "tabCapture", "debugger", "storage", "unlimitedStorage", "clipboardWrite"],
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -10,8 +10,8 @@
     "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
   },
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "options_page": "options.html",
   "background": { "service_worker": "background.js" },
-  "options_page": "settings.html",
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle" }],
-  "web_accessible_resources": [{ "resources": ["studio.html", "studio.js", "studio.css", "settings.html", "settings.js"], "matches": ["<all_urls>"] }]
+  "web_accessible_resources": [{ "resources": ["studio.html", "studio.js", "studio.css", "ocr.js", "options.html", "options.js"], "matches": ["<all_urls>"] }]
 }

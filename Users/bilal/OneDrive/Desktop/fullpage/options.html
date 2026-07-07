@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnapScroll Pro – Settings</title>
+  <link rel="stylesheet" href="studio.css" />
+  <style>
+    body { overflow:auto; }
+    .page { max-width:640px; margin:40px auto; padding:0 20px; }
+    .page h1 { font-size:24px; margin-bottom:6px; }
+    .page .sub { color:var(--text-muted); font-size:13px; margin-bottom:28px; }
+    .card { background:var(--bg-panel); border:1px solid var(--border-subtle); border-radius:14px; padding:20px; margin-bottom:18px; }
+    .card h2 { font-size:15px; margin-bottom:14px; }
+    .set-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border-subtle); }
+    .set-row:last-child { border-bottom:none; }
+    .set-row label { font-size:13px; color:var(--text-secondary); }
+    .set-row .desc { font-size:11px; color:var(--text-muted); margin-top:3px; }
+    select, input[type=number] { padding:7px 10px; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:8px; color:var(--text-primary); font:inherit; font-size:13px; min-width:120px; }
+    .save-bar { display:flex; gap:10px; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>SnapScroll Pro Settings</h1>
+    <div class="sub">These open in a full browser tab. Everything is stored locally on your device.</div>
+
+    <div class="card">
+      <h2>AI-Ready export</h2>
+      <div class="set-row">
+        <div><label>Default sharpness</label><div class="desc">Higher = crisper equations, bigger files.</div></div>
+        <select id="opt-scale"><option value="2">Sharp (2x)</option><option value="3">Ultra (3x)</option><option value="4">Max (4x)</option></select>
+      </div>
+      <div class="set-row">
+        <div><label>Tile size (px)</label><div class="desc">Max width/height of each slice handed to the AI.</div></div>
+        <input type="number" id="opt-tile" min="600" max="3000" step="100" />
+      </div>
+      <div class="set-row">
+        <div><label>Tile overlap (px)</label><div class="desc">Overlap so no equation gets cut between tiles.</div></div>
+        <input type="number" id="opt-overlap" min="0" max="400" step="10" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Capture</h2>
+      <div class="set-row">
+        <div><label>Capture delay (ms)</label><div class="desc">Wait before capturing (lets menus/animations settle).</div></div>
+        <input type="number" id="opt-delay" min="0" max="3000" step="100" />
+      </div>
+      <div class="set-row">
+        <div><label>Auto-open Studio after capture</label><div class="desc">Jump straight into editing.</div></div>
+        <select id="opt-autostudio"><option value="1">On</option><option value="0">Off</option></select>
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <button id="save" class="btn primary" style="flex:0 0 auto; padding:10px 24px">Save settings</button>
+      <span id="saved" class="set-status"></span>
+    </div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
