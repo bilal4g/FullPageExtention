@@ -27,7 +27,10 @@
       index,
       y: index * suggestedSegmentHeight,
       height: Math.min(suggestedSegmentHeight, page.scrollHeight - index * suggestedSegmentHeight),
-      label: `Segment ${index + 1}`
+      label: `Segment ${index + 1}`,
+      equationIds: equations
+        .filter((equation) => equation.bounds.y >= index * suggestedSegmentHeight && equation.bounds.y < (index + 1) * suggestedSegmentHeight)
+        .map((equation) => equation.id)
     }));
 
     return {
@@ -37,12 +40,16 @@
       page,
       math: {
         count: equations.length,
-        equations
+        equations,
+        summary: summarizeEquations(equations)
       },
       selection: readSelection(),
       segments,
       landmarks: collectLandmarks(),
-      colors: collectThemeTokens()
+      colors: collectThemeTokens(),
+      headings: collectHeadings(),
+      tables: collectTables(),
+      images: collectImages()
     };
   }
 
@@ -55,7 +62,8 @@
       '[data-latex]',
       '.mjx-container',
       '.katex-display',
-      '.katex-inline'
+      '.katex-inline',
+      '[aria-label*="equation"]'
     ];
 
     const seen = new Set();
@@ -78,6 +86,7 @@
           text,
           latex,
           mathMl,
+          confidence: calculateConfidence({ text, latex, mathMl }),
           bounds: {
             x: rect.left + window.scrollX,
             y: rect.top + window.scrollY,
@@ -88,6 +97,20 @@
         };
       })
       .filter(Boolean);
+  }
+
+  function summarizeEquations(equations) {
+    const displayCount = equations.filter((equation) => equation.type === 'display').length;
+    const inlineCount = equations.length - displayCount;
+    const lowConfidence = equations.filter((equation) => equation.confidence < 0.55).map((equation) => equation.id);
+    return {
+      displayCount,
+      inlineCount,
+      lowConfidence,
+      recommendedWorkflow: equations.length > 12
+        ? 'segment+metadata-export'
+        : 'single-image+metadata-export'
+    };
   }
 
   function classifyEquation(node) {
@@ -108,7 +131,17 @@
       .replace(/∞/g, ' \\infty ')
       .replace(/∑/g, ' \\sum ')
       .replace(/∫/g, ' \\int ')
+      .replace(/≈/g, ' \\approx ')
       .trim();
+  }
+
+  function calculateConfidence({ text, latex, mathMl }) {
+    let score = 0.2;
+    if (text?.length > 0) score += 0.2;
+    if (latex?.length > 0) score += 0.25;
+    if (mathMl?.length > 0) score += 0.35;
+    if ((latex || '').includes('\\')) score += 0.1;
+    return Math.min(1, Number(score.toFixed(2)));
   }
 
   function readSelection() {
@@ -128,6 +161,39 @@
         id: `landmark-${index + 1}`,
         tag: node.tagName.toLowerCase(),
         label: clean(node.getAttribute('aria-label') || node.id || node.className || '')
+      }));
+  }
+
+  function collectHeadings() {
+    return Array.from(document.querySelectorAll('h1, h2, h3, h4'))
+      .slice(0, 60)
+      .map((node, index) => ({
+        id: `heading-${index + 1}`,
+        level: node.tagName.toLowerCase(),
+        text: clean(node.textContent)
+      }));
+  }
+
+  function collectTables() {
+    return Array.from(document.querySelectorAll('table'))
+      .slice(0, 20)
+      .map((table, index) => ({
+        id: `table-${index + 1}`,
+        rows: table.rows.length,
+        columns: table.rows[0]?.cells.length || 0,
+        preview: clean(table.innerText).slice(0, 500)
+      }));
+  }
+
+  function collectImages() {
+    return Array.from(document.images)
+      .slice(0, 30)
+      .map((img, index) => ({
+        id: `img-${index + 1}`,
+        src: img.currentSrc || img.src,
+        alt: img.alt || '',
+        width: img.naturalWidth,
+        height: img.naturalHeight
       }));
   }
 

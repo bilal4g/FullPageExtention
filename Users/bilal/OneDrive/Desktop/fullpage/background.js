@@ -10,7 +10,9 @@ chrome.runtime.onInstalled.addListener(() => {
       exportScale: 2,
       defaultFormat: 'png',
       copyBehavior: 'clipboard+download',
-      onboardingSeen: false
+      onboardingSeen: false,
+      aiMathMode: 'metadata+image',
+      segmentation: 'auto'
     }
   });
 });
@@ -66,9 +68,13 @@ async function launchStudio({ mode = 'visible', tabId }) {
       viewportHeight: 0,
       devicePixelRatio: 1
     },
-    math: { equations: [], count: 0 },
+    math: { equations: [], count: 0, summary: { displayCount: 0, inlineCount: 0, lowConfidence: [], recommendedWorkflow: 'single-image+metadata-export' } },
     selection: null,
-    segments: []
+    segments: [],
+    landmarks: [],
+    headings: [],
+    tables: [],
+    images: []
   }));
 
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
@@ -84,8 +90,25 @@ async function launchStudio({ mode = 'visible', tabId }) {
       url: tab.url,
       favIconUrl: tab.favIconUrl
     },
-    metadata: metrics
+    metadata: metrics,
+    aiAssist: buildAiAssist(metrics)
   };
 
   return runtimeState.lastCapture;
+}
+
+function buildAiAssist(metrics) {
+  const summary = metrics?.math?.summary || {};
+  return {
+    recommendedPrompt: [
+      'Use the structured metadata alongside the screenshot.',
+      summary.lowConfidence?.length
+        ? `Pay extra attention to low-confidence equations: ${summary.lowConfidence.join(', ')}.`
+        : 'Equation confidence is high for the detected math markup.',
+      `Recommended workflow: ${summary.recommendedWorkflow || 'single-image+metadata-export'}.`
+    ].join(' '),
+    segmentationHint: metrics?.segments?.length > 1
+      ? `This page is long; process ${metrics.segments.length} image segments in order.`
+      : 'Single image processing is sufficient.'
+  };
 }

@@ -145,14 +145,14 @@ function resizeCanvasToImage() {
 
 function buildSuggestedOverlays(capture) {
   const overlays = [];
-  capture.metadata?.math?.equations?.slice(0, 12).forEach((equation, index) => {
+  capture.metadata?.math?.equations?.slice(0, 20).forEach((equation, index) => {
     overlays.push({
       id: `math-${index + 1}`,
       type: 'number',
       label: String(index + 1),
       x: 48,
       y: 48 + index * 32,
-      color: '#f59e0b',
+      color: equation.confidence < 0.55 ? '#ef4444' : '#f59e0b',
       meta: equation
     });
   });
@@ -234,7 +234,9 @@ function renderProperties() {
   if (state.capture) {
     properties.unshift(
       ['Page URL', state.capture.tab?.url || 'Unknown'],
-      ['Page size', `${state.capture.metadata?.page?.scrollWidth || 0} × ${state.capture.metadata?.page?.scrollHeight || 0}`]
+      ['Page size', `${state.capture.metadata?.page?.scrollWidth || 0} × ${state.capture.metadata?.page?.scrollHeight || 0}`],
+      ['AI workflow', state.capture.aiAssist?.segmentationHint || 'Single image'],
+      ['Math workflow', state.capture.metadata?.math?.summary?.recommendedWorkflow || 'single-image+metadata-export']
     );
   }
 
@@ -249,15 +251,26 @@ function renderProperties() {
 function renderMathPanel() {
   const equations = state.capture?.metadata?.math?.equations || [];
   if (!equations.length) {
-    els.mathPanel.innerHTML = '<div class="math-item">No math markup detected yet. Full-page captures still export structured metadata and page segments.</div>';
+    els.mathPanel.innerHTML = '<div class="math-item">No math markup detected yet. Full-page captures still export structured metadata, headings, tables, images, and page segments.</div>';
     return;
   }
 
-  els.mathPanel.innerHTML = equations.slice(0, 10).map((equation, index) => `
+  const summary = state.capture.metadata?.math?.summary || {};
+  const summaryCard = `
+    <div class="math-item">
+      <strong>AI-ready math summary</strong>
+      <div>${summary.displayCount || 0} display equations, ${summary.inlineCount || 0} inline equations</div>
+      <div>${summary.lowConfidence?.length || 0} low-confidence equations flagged</div>
+      <code>${escapeHtml(state.capture.aiAssist?.recommendedPrompt || '')}</code>
+    </div>
+  `;
+
+  els.mathPanel.innerHTML = summaryCard + equations.slice(0, 10).map((equation, index) => `
     <div class="math-item">
       <strong>Equation ${index + 1}</strong>
       <div>${escapeHtml(equation.text || equation.latex || 'Untitled equation')}</div>
-      ${equation.latex ? `<code>${escapeHtml(equation.latex.slice(0, 120))}</code>` : ''}
+      <div>Confidence: ${(equation.confidence * 100).toFixed(0)}%</div>
+      ${equation.latex ? `<code>${escapeHtml(equation.latex.slice(0, 140))}</code>` : ''}
     </div>
   `).join('');
 }
@@ -394,8 +407,14 @@ async function exportMathMetadata() {
       mode: state.capture.mode,
       createdAt: state.capture.createdAt
     },
+    aiAssist: state.capture.aiAssist,
     metadata: state.capture.metadata,
-    overlays: state.overlays
+    overlays: state.overlays,
+    prompt: [
+      'Use this JSON alongside the screenshot to interpret every equation precisely.',
+      state.capture.aiAssist?.recommendedPrompt,
+      state.capture.aiAssist?.segmentationHint
+    ].filter(Boolean).join(' ')
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
