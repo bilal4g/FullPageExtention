@@ -1,206 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FullPage Studio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <div class="app-shell" id="appShell">
-    <aside class="sidebar" aria-label="Editing tools">
-      <div class="brand-block">
-        <div class="brand-icon">FS</div>
-        <div>
-          <p class="eyebrow">Professional screenshot editor</p>
-          <h1>FullPage Studio</h1>
-        </div>
+  <div class="wrap">
+    <div class="header">
+      <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="url(#lg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="lg" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 14h8"/></svg>
+        <h1>FullPage Studio</h1>
       </div>
+      <div class="subtitle">Capture, edit, and hand clean math to any AI</div>
+    </div>
 
-      <button class="capture-button primary" data-capture="full">Capture full page</button>
-      <button class="capture-button secondary" data-capture="visible">Capture visible area</button>
-      <div class="status-card" id="statusCard" aria-live="polite">Ready. Use the capture buttons or keyboard shortcuts to start.</div>
+    <button id="cap-full" class="primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 10h16"/><path d="M12 14v4"/></svg>
+      Capture full page
+    </button>
+    <button id="cap-visible" class="secondary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/></svg>
+      Capture visible area
+    </button>
 
-      <nav class="tool-groups" aria-label="Toolbox">
-        <section>
-          <h2>Canvas</h2>
-          <div class="tool-grid">
-            <button class="tool-chip active" data-tool="select">Select</button>
-            <button class="tool-chip" data-tool="crop">Crop</button>
-            <button class="tool-chip" data-tool="resize">Resize</button>
-            <button class="tool-chip" data-tool="rotate">Rotate</button>
-            <button class="tool-chip" data-tool="flip">Flip</button>
-            <button class="tool-chip" data-tool="segment">Segments</button>
-          </div>
-        </section>
-        <section>
-          <h2>Annotate</h2>
-          <div class="tool-grid">
-            <button class="tool-chip" data-tool="draw">Draw</button>
-            <button class="tool-chip" data-tool="highlight">Highlight</button>
-            <button class="tool-chip" data-tool="blur">Blur</button>
-            <button class="tool-chip" data-tool="redact">Redact</button>
-            <button class="tool-chip" data-tool="arrow">Arrow</button>
-            <button class="tool-chip" data-tool="shape">Shape</button>
-            <button class="tool-chip" data-tool="number">Number</button>
-            <button class="tool-chip" data-tool="text">Text</button>
-          </div>
-        </section>
-        <section>
-          <h2>Output</h2>
-          <div class="tool-grid compact">
-            <button class="tool-chip" id="copyBtn">Copy</button>
-            <button class="tool-chip" id="shareBtn">Share</button>
-            <button class="tool-chip" id="downloadBtn">Export</button>
-            <button class="tool-chip" id="metadataBtn">Math data</button>
-          </div>
-        </section>
-      </nav>
+    <div class="divider"></div>
 
-      <section class="sidebar-panel">
-        <h2>History</h2>
-        <div class="history-actions">
-          <button class="ghost-btn" id="undoBtn">Undo</button>
-          <button class="ghost-btn" id="redoBtn">Redo</button>
-        </div>
-        <ol class="history-list" id="historyList"></ol>
-      </section>
-    </aside>
+    <button id="open-studio" class="ghost">Open Studio (last capture)</button>
+    <button id="open-settings" class="ghost">Settings</button>
 
-    <main class="studio" aria-label="Editor workspace">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Lightweight Canva / Photopea inspired workspace</p>
-          <h2 id="workspaceTitle">Ready to capture</h2>
-        </div>
-        <div class="header-actions">
-          <button class="ghost-btn" id="themeToggleBtn">Toggle theme</button>
-          <button class="ghost-btn" id="resetBtn">Reset</button>
-          <button class="primary small" id="onboardingBtn">Shortcuts</button>
-        </div>
-      </header>
-
-      <section class="toolbar" aria-label="Editing options">
-        <div class="control-group">
-          <label for="strokeColor">Color</label>
-          <input id="strokeColor" type="color" value="#7c3aed">
-        </div>
-        <div class="control-group">
-          <label for="fillColor">Fill</label>
-          <input id="fillColor" type="color" value="#22c55e">
-        </div>
-        <div class="control-group">
-          <label for="fontFamily">Font</label>
-          <select id="fontFamily">
-            <option>Inter</option>
-            <option>Arial</option>
-            <option>Georgia</option>
-            <option>Courier New</option>
-          </select>
-        </div>
-        <div class="control-group">
-          <label for="fontSize">Font size</label>
-          <input id="fontSize" type="range" min="12" max="42" value="20">
-        </div>
-        <div class="control-group wide">
-          <label for="cropPreset">Crop preset</label>
-          <select id="cropPreset">
-            <option value="free">Freeform</option>
-            <option value="1:1">Square 1:1</option>
-            <option value="16:9">Presentation 16:9</option>
-            <option value="4:3">Classic 4:3</option>
-            <option value="3:2">Doc 3:2</option>
-            <option value="210:297">A4</option>
-          </select>
-        </div>
-      </section>
-
-      <section class="workspace-grid">
-        <div class="canvas-panel">
-          <div class="canvas-toolbar">
-            <span class="badge" id="captureModeBadge">No capture</span>
-            <span class="badge subtle" id="mathCountBadge">0 equations detected</span>
-            <span class="badge subtle" id="segmentCountBadge">0 segments</span>
-          </div>
-          <div class="canvas-container" id="canvasContainer">
-            <canvas id="editorCanvas" width="1440" height="900" aria-label="Screenshot editor canvas"></canvas>
-            <div class="empty-state" id="emptyState">
-              <h3>Capture a page to start editing</h3>
-              <p>Use Ctrl/Cmd + Shift + S for visible capture or Ctrl/Cmd + Shift + F for full-page capture.</p>
-            </div>
-          </div>
-        </div>
-
-        <aside class="inspector" aria-label="Inspector panels">
-          <section class="panel">
-            <h3>Properties</h3>
-            <div class="property-list" id="propertyList"></div>
-          </section>
-          <section class="panel">
-            <h3>Smart math layer</h3>
-            <div class="math-panel" id="mathPanel"></div>
-          </section>
-          <section class="panel">
-            <h3>Export</h3>
-            <label class="stacked-label">Format
-              <select id="exportFormat">
-                <option value="png">PNG</option>
-                <option value="jpeg">JPEG</option>
-                <option value="webp">WebP</option>
-                <option value="json">JSON + Math Metadata</option>
-              </select>
-            </label>
-            <label class="stacked-label">Scale
-              <select id="exportScale">
-                <option value="1">1x</option>
-                <option value="2" selected>2x</option>
-                <option value="3">3x</option>
-              </select>
-            </label>
-            <button class="primary" id="exportBtn">Export current result</button>
-          </section>
-          <section class="panel">
-            <h3>Studio settings</h3>
-            <label class="stacked-label">Default export format
-              <select id="defaultExportFormat">
-                <option value="png">PNG</option>
-                <option value="jpeg">JPEG</option>
-                <option value="webp">WebP</option>
-                <option value="json">JSON + Math Metadata</option>
-              </select>
-            </label>
-            <label class="stacked-label">Default scale
-              <select id="defaultExportScale">
-                <option value="1">1x</option>
-                <option value="2">2x</option>
-                <option value="3">3x</option>
-              </select>
-            </label>
-            <button class="ghost-btn" id="saveSettingsBtn">Save defaults</button>
-          </section>
-        </aside>
-      </section>
-    </main>
+    <div id="status" class="status">Ready. Capture opens the Studio automatically.</div>
   </div>
-
-  <dialog id="shortcutsDialog">
-    <h2>Keyboard shortcuts</h2>
-    <ul>
-      <li><strong>V</strong> Select</li>
-      <li><strong>C</strong> Crop</li>
-      <li><strong>B</strong> Blur</li>
-      <li><strong>H</strong> Highlight</li>
-      <li><strong>R</strong> Redact</li>
-      <li><strong>T</strong> Rich text</li>
-      <li><strong>Ctrl/Cmd + Z</strong> Undo</li>
-      <li><strong>Ctrl/Cmd + Shift + Z</strong> Redo</li>
-    </ul>
-    <button class="primary" id="closeShortcutsBtn">Close</button>
-  </dialog>
-
   <script src="popup.js"></script>
 </body>
 </html>
