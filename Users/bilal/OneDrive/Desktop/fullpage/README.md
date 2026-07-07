@@ -1,47 +1,51 @@
 # FullPage Studio
 
-Full-page screenshot capture and a professional editing Studio for Chromium
-browsers (Chrome / Microsoft Edge). Captures a page, lets you edit it like a
-lightweight Photopea, and hands **clean, machine-readable math** to any AI
-without a single API key.
+Full-page screenshot capture with a professional editing Studio and
+**API-free, AI-readable math extraction**. Works in Chrome and Microsoft Edge
+(Manifest V3).
 
-## How it works
+## Flow
 
-1. **Simple popup** – click the toolbar icon for a small popup with two buttons:
-   *Capture full page* and *Capture visible area*, plus *Open Studio* and
-   *Settings*.
-2. **Capture opens the Studio** – after a capture the full-screen Studio opens
-   in a browser tab with the screenshot already loaded.
-3. **Edit** – crop (with size presets), resize, rotate/flip, text, pen, arrow,
-   rectangle, ellipse, highlighter, blur and redact, with undo/redo, zoom and
-   pan.
-4. **Export** – PNG / JPG / WebP / PDF, copy to clipboard, or **Export
-   segments** for long pages.
+1. Click the toolbar icon → a small popup opens.
+2. Choose **Capture full page** or **Capture visible area** (or use the keyboard
+   shortcuts). The popup captures, then opens the **Studio** in a new browser
+   tab with your screenshot already loaded.
+3. Edit in the Studio, extract math for AI, and export.
+4. **More settings** in the popup opens a full settings page in the browser.
 
-## The math problem, solved without an API
+## The Studio
 
-AIs struggle to read equations in a tall, downscaled screenshot because they
-cannot zoom in. FullPage Studio fixes this with **zero external services**, so
-it scales to any number of users at no cost:
+A full-tab editor:
 
-- **Equation extraction from the page HTML.** The content script reads real
-  math markup already in the page – MathML, MathJax, KaTeX, `data-latex`, and
-  ARIA labels – and turns it into LaTeX + plain text. This is exact, not OCR
-  guessing.
-- **Copy as AI prompt.** One click bundles those equations into a prompt you
-  paste alongside the screenshot, so the model reads the actual math.
-- **Segment export.** For image-only math, the capture is sliced into readable
-  vertical segments plus a JSON manifest, so every equation reaches the AI at
-  full resolution instead of shrunk into one giant image.
+- Crop with aspect presets (1:1, 4:3, 16:9, 3:4, A4, free) and pixel-exact resize
+- Rotate / flip
+- Text, pen, arrow, rectangle, ellipse, highlighter
+- Blur and redact (black box) for sensitive info
+- Undo / redo, zoom / pan, keyboard shortcuts
+- Export **PNG / JPG / WebP / PDF** at **1x / 2x / 4x / Max 8K**, plus copy to clipboard
+- Drag-drop, paste, or open any image — not just captures
 
-There are **no API keys, no accounts, and no network calls** for math. Delivery
-is configurable in Settings (equation text + image, text only, or image only).
+## Making math AI-readable (no API key)
 
-## Settings page
+The hard problem: hand an AI a screenshot full of equations and it often
+misreads them, because rendered math is just pixels.
 
-A full settings page opens in its own browser tab (extension options page).
-It controls default export format, export scale, theme, how math is handed to
-the AI, and long-page segmentation.
+**The fix, with zero external services:** on almost every math site the real
+equations are already in the page source — as **MathML**, **KaTeX**/**MathJax**
+markup, LaTeX `annotation` nodes, or LaTeX in image `alt` text. At capture time
+the content script reads those out of the DOM. The Studio's **✨ Math for AI**
+panel lists them in reading order and builds a copy-paste bundle:
+
+> The attached image is a screenshot. Its math equations, read directly from the
+> page source, are listed below in reading order (LaTeX)…
+
+You paste that alongside your image and the AI treats the LaTeX as ground truth.
+
+Because this is pure DOM reading in the browser, there is **no API key, no cost,
+and no per-user limit** — it scales to as many users as install the extension.
+
+If a page bakes equations into flat images with no readable source, use
+**Export at Max 8K** so the picture itself is sharp enough for the AI to read.
 
 ## Keyboard shortcuts
 
@@ -49,24 +53,14 @@ the AI, and long-page segmentation.
 | --- | --- |
 | `Ctrl/Cmd + Shift + S` | Capture visible area |
 | `Ctrl/Cmd + Shift + F` | Capture full page |
-| `V` | Move / pan |
-| `C` | Crop |
-| `T` | Text |
-| `P` | Pen |
-| `A` | Arrow |
-| `R` | Rectangle |
-| `O` | Ellipse |
-| `H` | Highlighter |
-| `B` | Blur |
-| `X` | Redact |
-| `Ctrl/Cmd + Z` | Undo |
-| `Ctrl/Cmd + Shift + Z` | Redo |
+| `V C T P A R O H B X` | Studio tools |
+| `Ctrl/Cmd + Z` / `+ Shift + Z` | Undo / Redo |
 
-## Install (developer / unpacked)
+## Load it (developer mode)
 
 1. Open `chrome://extensions` (or `edge://extensions`).
 2. Enable **Developer mode**.
-3. **Load unpacked** and select the `fullpage` folder.
-4. Click the icon, capture a page, and the Studio opens with your capture.
+3. **Load unpacked** → select this `fullpage` folder.
+4. Pin the icon, open a page, and hit capture.
 
-No build step and no dependencies are required to run it unpacked.
+No build step required.
