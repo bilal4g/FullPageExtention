@@ -7,30 +7,36 @@ const CAP_KEY = 'fp_last_capture';
 const SETTINGS_KEY = 'fp_settings';
 const DEFAULT_SETTINGS = { theme: 'dark', defaultFormat: 'png', exportScale: 2, autoExtractMath: true };
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(SETTINGS_KEY, (d) => {
-    if (!d[SETTINGS_KEY]) chrome.storage.local.set({ [SETTINGS_KEY]: DEFAULT_SETTINGS });
+if (chrome.runtime && chrome.runtime.onInstalled) {
+  chrome.runtime.onInstalled.addListener(() => {
+    chrome.storage.local.get(SETTINGS_KEY, (d) => {
+      if (!d[SETTINGS_KEY]) chrome.storage.local.set({ [SETTINGS_KEY]: DEFAULT_SETTINGS });
+    });
   });
-});
+}
 
-// Keyboard shortcuts capture and open the popup result implicitly by storing
-// the capture; the user re-opens the toolbar popup to see it. (No auto tab.)
-chrome.commands.onCommand.addListener(async (command) => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !tab.id) return;
-  const mode = command === 'capture-full-page' ? 'full' : 'visible';
-  try { await runCapture({ mode, tabId: tab.id }); } catch (e) { /* ignore */ }
-});
+// Keyboard shortcuts capture and store the result; the user opens the toolbar
+// popup to see it. Guarded because chrome.commands may be undefined at boot.
+if (chrome.commands && chrome.commands.onCommand) {
+  chrome.commands.onCommand.addListener(async (command) => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) return;
+    const mode = command === 'capture-full-page' ? 'full' : 'visible';
+    try { await runCapture({ mode, tabId: tab.id }); } catch (e) { /* ignore */ }
+  });
+}
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'studio:capture') {
-    runCapture({ mode: message.mode || 'visible', tabId: message.tabId || (sender.tab && sender.tab.id) })
-      .then((payload) => sendResponse({ ok: true, id: payload.id }))
-      .catch((err) => sendResponse({ ok: false, error: err.message }));
-    return true;
-  }
-  return false;
-});
+if (chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message && message.type === 'studio:capture') {
+      runCapture({ mode: message.mode || 'visible', tabId: message.tabId || (sender.tab && sender.tab.id) })
+        .then((payload) => sendResponse({ ok: true, id: payload.id }))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+    return false;
+  });
+}
 
 function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function send(tabId, msg) { return new Promise((resolve) => { chrome.tabs.sendMessage(tabId, msg, (res) => { void chrome.runtime.lastError; resolve(res); }); }); }
