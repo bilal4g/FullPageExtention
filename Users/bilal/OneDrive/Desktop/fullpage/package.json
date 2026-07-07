@@ -1,0 +1,11 @@
+{
+  "name": "fullpage-capture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Full page screenshot capture & editing extension - release tooling",
+  "scripts": {
+    "release:edge": "node scripts/edge-publish.mjs",
+    "package:edge": "node scripts/edge-publish.mjs --no-publish"
+  }
+}

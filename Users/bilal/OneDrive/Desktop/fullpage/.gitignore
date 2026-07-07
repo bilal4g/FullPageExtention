@@ -1,0 +1,13 @@
+# Build & packaging output
+build/
+dist/
+*.zip
+
+# Secrets (never commit real credentials)
+.env
+
+# OS / editor junk
+desktop.ini
+.DS_Store
+Thumbs.db
+node_modules/
