@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SnapScroll Pro",
   "version": "1.4.0",
-  "description": "Full-page capture with a pro editing Studio and no-API, on-device math extraction for AI.",
+  "description": "Full-page capture with a pro Studio editor and key-free math/text extraction for AI.",
   "permissions": ["activeTab", "scripting", "tabs", "tabCapture", "debugger", "storage", "unlimitedStorage", "clipboardWrite"],
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -12,6 +12,5 @@
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "background": { "service_worker": "background.js" },
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle" }],
-  "options_ui": { "page": "options.html", "open_in_tab": true },
-  "web_accessible_resources": [{ "resources": ["studio.html", "studio.js", "studio.css", "options.html", "options.js"], "matches": ["<all_urls>"] }]
+  "web_accessible_resources": [{ "resources": ["studio.html", "studio.js", "studio.css"], "matches": ["<all_urls>"] }]
 }

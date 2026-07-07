@@ -1,94 +1,113 @@
-/* SnapScroll Pro - Popup bridge.
- * 1) 'More settings' opens the full options page.
- * 2) When a capture finishes (result view appears), automatically:
- *    - grab the full-res screenshot from the preview canvas
- *    - extract equations from the live page DOM (no API, on-device)
- *    - stash both and open the Studio in a new tab with the capture loaded.
- * The capture engine in popup.js is left completely untouched. */
+/* SnapScroll Pro - Studio bridge (runs in the popup, after popup.js).
+ * 1) Auto-opens the Studio in a browser tab with the capture the moment a
+ *    shot finishes (the popup stays simple).
+ * 2) Extracts real math/text from the page DOM at capture time - no API key,
+ *    no cost, scales to unlimited users. */
 (function () {
-  'use strict';
+  var opened = false;
 
-  // Injected into the captured page. Pulls exact equation source that sites
-  // already ship in their DOM (KaTeX/MathJax/MathML). No network, no solving.
-  function ssExtractMathInject() {
+  // Injected into the captured page (all frames). Must be self-contained.
+  function ssExtractMath() {
     try {
-      var out = { latex: [], mathml: [], text: [] };
+      var latex = [];
       var seen = {};
-      function push(kind, v) {
-        if (!v) return; v = String(v).trim(); if (!v) return;
-        var key = kind + '|' + v; if (seen[key]) return; seen[key] = 1;
-        out[kind].push(v);
+      function add(t) {
+        if (!t) return;
+        t = ('' + t).trim();
+        if (!t || t.length > 4000 || seen[t]) return;
+        seen[t] = 1; latex.push(t);
       }
-      // KaTeX + LaTeX->MathML converters store TeX in <annotation encoding="application/x-tex">
-      document.querySelectorAll('annotation[encoding="application/x-tex"]').forEach(function (a) { push('latex', a.textContent); });
-      // MathJax v2/v3 keep original TeX in <script type="math/tex">
-      document.querySelectorAll('script[type="math/tex"], script[type="math/tex; mode=display"]').forEach(function (s) { push('latex', s.textContent); });
-      // MathJax v3 accessible label as a fallback when no TeX source is present
-      document.querySelectorAll('mjx-container[aria-label], .MathJax[aria-label]').forEach(function (m) { push('text', m.getAttribute('aria-label')); });
+      // KaTeX + MathJax TeX annotations (original LaTeX kept in the DOM)
+      document.querySelectorAll('annotation[encoding="application/x-tex"]').forEach(function (a) { add(a.textContent); });
+      // MathJax v2 script tags
+      document.querySelectorAll('script[type^="math/tex"]').forEach(function (s) { add(s.textContent); });
+      // Renderers that stash LaTeX in an attribute
+      document.querySelectorAll('[data-latex]').forEach(function (el) { add(el.getAttribute('data-latex')); });
+      // MathJax v3 accessible label
+      document.querySelectorAll('mjx-container').forEach(function (c) { var l = c.getAttribute('aria-label'); if (l) add(l); });
       // Raw MathML blocks
-      document.querySelectorAll('math').forEach(function (m) { push('mathml', m.outerHTML); });
-      // Wikipedia and similar: LaTeX is the img alt on math images
-      document.querySelectorAll('img[alt]').forEach(function (img) {
+      var mathml = [];
+      document.querySelectorAll('math').forEach(function (m) { if (mathml.length < 300) mathml.push(m.outerHTML); });
+      // Images that encode LaTeX (Wikipedia alt text, CodeCogs/QuickLaTeX src)
+      document.querySelectorAll('img').forEach(function (img) {
         var alt = img.getAttribute('alt') || '';
-        var cls = (img.className || '') + '';
-        if (alt.length > 2 && /math|tex|equation/i.test(cls)) push('latex', alt);
+        if (/\\(frac|sqrt|sum|int|alpha|beta|theta|cdot|times|left|right|begin)|[\^_]\{|\$\$?/.test(alt)) add(alt);
+        var src = img.getAttribute('src') || '';
+        try { var m = src.match(/(?:latex|tex)\?(?:[^=&]*=)?([^&]+)/i); if (m) add(decodeURIComponent(m[1].replace(/\+/g, ' '))); } catch (e) {}
       });
-      return out;
-    } catch (e) { return { latex: [], mathml: [], text: [], error: String(e) }; }
+      // Readable page text for context
+      var text = '';
+      try {
+        var main = document.querySelector('main, article, #content, .content, #mw-content-text') || document.body;
+        text = (main.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+        if (text.length > 200000) text = text.slice(0, 200000);
+      } catch (e) {}
+      return { latex: latex, mathml: mathml, text: text, url: location.href, title: document.title || '' };
+    } catch (e) { return { latex: [], mathml: [], text: '', error: String(e) }; }
   }
 
-  function grabImage() {
+  function getActiveTab() {
+    return new Promise(function (res) {
+      chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) { res(tabs && tabs[0]); });
+    });
+  }
+
+  async function extractMath() {
+    try {
+      var tab = await getActiveTab();
+      if (!tab || !tab.id) return null;
+      var results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: ssExtractMath });
+      var latex = [], mathml = [], text = '', seen = {};
+      (results || []).forEach(function (r) {
+        var v = r && r.result; if (!v) return;
+        (v.latex || []).forEach(function (t) { if (t && !seen[t]) { seen[t] = 1; latex.push(t); } });
+        (v.mathml || []).forEach(function (m) { mathml.push(m); });
+        if (v.text && v.text.length > text.length) text = v.text;
+      });
+      return { latex: latex, mathml: mathml, text: text, url: (tab.url || ''), title: (tab.title || '') };
+    } catch (e) { return null; }
+  }
+
+  function grabDataUrl() {
+    try { if (window.capturedCanvas && window.capturedCanvas.width) return window.capturedCanvas.toDataURL('image/png'); } catch (e) {}
     var c = document.getElementById('preview-canvas');
     if (c && c.width) { try { return c.toDataURL('image/png'); } catch (e) {} }
     return null;
   }
 
-  async function extractMath() {
-    try {
-      var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tabs || !tabs[0]) return null;
-      var res = await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, func: ssExtractMathInject });
-      if (res && res[0]) return res[0].result;
-    } catch (e) {}
-    return null;
-  }
-
-  async function openStudio() {
-    var image = grabImage();
-    var math = await extractMath();
-    var payload = { ss_studio_ts: Date.now(), ss_studio_math: math || { latex: [], mathml: [], text: [] } };
-    if (image) payload.ss_studio_image = image;
+  async function openStudio(withCapture) {
+    var payload = { ss_studio_ts: Date.now(), ss_studio_image: null, ss_studio_math: null };
+    if (withCapture) {
+      var d = grabDataUrl(); if (d) payload.ss_studio_image = d;
+      var m = await extractMath(); if (m) payload.ss_studio_math = m;
+    }
     chrome.storage.local.set(payload, function () {
       chrome.tabs.create({ url: chrome.runtime.getURL('studio.html') });
     });
   }
 
-  var opened = false;
-
-  function watchResult() {
-    var result = document.getElementById('result-view');
-    var progress = document.getElementById('progress-view');
-    var main = document.getElementById('main-view');
-    if (!result) return;
-    var obs = new MutationObserver(function () {
-      if (progress && progress.classList.contains('active')) opened = false; // new capture in progress
-      if (main && main.classList.contains('active')) opened = false;
-      if (result.classList.contains('active') && !opened) {
-        opened = true;
-        // Let popup.js finish drawing the preview canvas first.
-        setTimeout(openStudio, 120);
-      }
-    });
-    obs.observe(result, { attributes: true, attributeFilter: ['class'] });
-    if (progress) obs.observe(progress, { attributes: true, attributeFilter: ['class'] });
-    if (main) obs.observe(main, { attributes: true, attributeFilter: ['class'] });
-  }
-
-  document.addEventListener('DOMContentLoaded', function () {
-    var more = document.getElementById('more-btn');
-    if (more) more.addEventListener('click', function () { chrome.runtime.openOptionsPage(); });
-    var studioBtn = document.getElementById('studio-btn');
-    if (studioBtn) studioBtn.addEventListener('click', function (e) { e.preventDefault(); opened = true; openStudio(); });
-    watchResult();
+  // Manual buttons
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('#studio-btn, #open-editor-footer') : null;
+    if (!t) return;
+    e.preventDefault();
+    openStudio(t.id === 'studio-btn');
   });
+
+  // Auto-open Studio as soon as the capture result is shown
+  var resultView = document.getElementById('result-view');
+  var progressView = document.getElementById('progress-view');
+  if (resultView) {
+    new MutationObserver(function () {
+      if (resultView.classList.contains('active') && !opened) {
+        opened = true;
+        setTimeout(function () { openStudio(true); }, 150);
+      }
+    }).observe(resultView, { attributes: true, attributeFilter: ['class'] });
+  }
+  if (progressView) {
+    new MutationObserver(function () {
+      if (progressView.classList.contains('active')) opened = false; // reset for the next capture
+    }).observe(progressView, { attributes: true, attributeFilter: ['class'] });
+  }
 })();

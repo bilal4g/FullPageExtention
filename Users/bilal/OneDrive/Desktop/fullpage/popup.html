@@ -7,14 +7,17 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <!-- Main view (kept simple) -->
+  <!-- Main view -->
   <div id="main-view" class="view active">
     <div class="header">
       <div class="logo">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#lg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="lg" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 14h8"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#lg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs>
+          <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 14h8"/>
+        </svg>
         <h1>SnapScroll Pro</h1>
       </div>
-      <div class="subtitle">Capture → opens the Studio automatically</div>
+      <div class="subtitle">Capture → opens in Studio automatically</div>
     </div>
 
     <div class="format-section">
@@ -30,7 +33,7 @@
       Capture Full Page
     </button>
 
-    <button id="more-btn" class="secondary-btn" style="margin-top:12px">⚙ More settings</button>
+    <button id="open-editor-footer" class="secondary-btn" style="margin-top:12px">Open full editor &amp; settings ↗</button>
 
     <div class="footer">Works on any website</div>
   </div>
@@ -49,12 +52,21 @@
     <div id="progress-status" class="progress-status">Preparing…</div>
   </div>
 
-  <!-- Result view (kept as fallback; Studio opens automatically) -->
+  <!-- Result view -->
   <div id="result-view" class="view">
     <div class="result-preview"><canvas id="preview-canvas"></canvas></div>
-    <div id="result-info" class="result-info">Opening Studio…</div>
-    <button id="studio-btn" class="capture-btn" style="margin-bottom:8px">Open in Studio</button>
-    <button id="download-btn" class="capture-btn download-btn"><span id="download-label">Download PNG</span></button>
+    <div id="result-info" class="result-info">Opening in Studio…</div>
+
+    <button id="studio-btn" class="capture-btn" style="margin-bottom:8px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      Open in Studio
+    </button>
+
+    <button id="download-btn" class="capture-btn download-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      <span id="download-label">Download PNG</span>
+    </button>
+
     <button id="retry-btn" class="secondary-btn">Capture Again</button>
   </div>
 
