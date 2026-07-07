@@ -1,9 +1,9 @@
-/* FullPage Studio - simple popup. Drives capture via the background worker,
- * then opens the Studio (full browser tab) with the capture loaded. */
+/* FullPage Studio - simple popup.
+ * Drives capture via the background worker, then opens the Studio
+ * (full browser tab) with the capture already loaded. */
 (function () {
   const $ = (id) => document.getElementById(id);
   const status = $('status');
-
   function setStatus(msg) { status.textContent = msg; }
   function disableAll(v) { document.querySelectorAll('button').forEach((b) => (b.disabled = v)); }
 
@@ -11,18 +11,18 @@
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     return tab && tab.id;
   }
-
   function openStudio() { chrome.tabs.create({ url: chrome.runtime.getURL('studio.html') }); }
 
   async function capture(mode) {
     const tabId = await activeTabId();
     if (!tabId) { setStatus('No active tab to capture.'); return; }
     disableAll(true);
-    setStatus(mode === 'full' ? 'Capturing full page\u2026 (stitching, hang tight)' : 'Capturing\u2026');
+    setStatus(mode === 'full' ? 'Capturing full page\u2026 stitching, hang tight.' : 'Capturing\u2026');
     chrome.runtime.sendMessage({ type: 'studio:capture', mode, tabId }, (res) => {
       disableAll(false);
+      if (chrome.runtime.lastError) { setStatus('Capture failed: ' + chrome.runtime.lastError.message); return; }
       if (res && res.ok) { openStudio(); window.close(); }
-      else { setStatus('Capture failed: ' + ((res && res.error) || 'unknown error') + '. Try reloading the page.'); }
+      else { setStatus('Capture failed: ' + ((res && res.error) || 'unknown') + '. Try reloading the page.'); }
     });
   }
 
@@ -31,6 +31,6 @@
   $('open-studio').addEventListener('click', openStudio);
   $('open-settings').addEventListener('click', () => {
     if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
-    else chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
+    else chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
   });
 })();
