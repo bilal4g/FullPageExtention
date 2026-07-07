@@ -1,66 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "FullPage Studio",
-  "version": "1.0.1",
-  "description": "Capture full pages and edit them in a professional screenshot studio with annotations, math-aware export, and smart sharing.",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "downloads",
-    "storage",
-    "tabs",
-    "clipboardWrite"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
+  "name": "SnapScroll Pro",
+  "version": "1.3.0",
+  "description": "Smart full-page screenshot capture with a pro editing Studio and math-aware text extraction.",
+  "permissions": ["activeTab", "scripting", "tabs", "tabCapture", "debugger", "storage", "unlimitedStorage", "clipboardWrite"],
+  "host_permissions": ["<all_urls>"],
   "action": {
-    "default_title": "Open FullPage Studio",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
   },
-  "commands": {
-    "capture-visible": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+S",
-        "mac": "Command+Shift+S"
-      },
-      "description": "Capture visible area and open the studio"
-    },
-    "capture-full-page": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+F",
-        "mac": "Command+Shift+F"
-      },
-      "description": "Capture full page and open the studio"
-    }
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "icons/*"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
-    }
-  ]
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle" }],
+  "web_accessible_resources": [{ "resources": ["studio.html", "studio.js", "studio.css", "ocr.js"], "matches": ["<all_urls>"] }]
 }
