@@ -114,6 +114,15 @@ h1, h2, h3, p { margin: 0; }
   border-color: var(--border);
   padding: 10px 12px;
 }
+.status-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .tool-groups {
   display: flex;
   flex-direction: column;

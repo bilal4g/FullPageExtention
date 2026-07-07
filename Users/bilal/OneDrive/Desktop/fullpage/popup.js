@@ -28,7 +28,8 @@ const els = {
   mathCountBadge: document.getElementById('mathCountBadge'),
   segmentCountBadge: document.getElementById('segmentCountBadge'),
   captureModeBadge: document.getElementById('captureModeBadge'),
-  shortcutsDialog: document.getElementById('shortcutsDialog')
+  shortcutsDialog: document.getElementById('shortcutsDialog'),
+  statusCard: document.getElementById('statusCard')
 };
 const ctx = els.canvas.getContext('2d');
 const image = new Image();
@@ -37,6 +38,7 @@ boot();
 
 async function boot() {
   bindUI();
+  await loadStoredSettings();
   await restoreCapture();
   render();
 }
@@ -81,6 +83,12 @@ function bindUI() {
   document.getElementById('exportScale').addEventListener('change', (e) => {
     state.settings.exportScale = Number(e.target.value);
   });
+  document.getElementById('defaultExportFormat').addEventListener('change', (e) => {
+    state.settings.exportFormat = e.target.value;
+  });
+  document.getElementById('defaultExportScale').addEventListener('change', (e) => {
+    state.settings.exportScale = Number(e.target.value);
+  });
 
   document.getElementById('downloadBtn').addEventListener('click', exportResult);
   document.getElementById('exportBtn').addEventListener('click', exportResult);
@@ -93,9 +101,42 @@ function bindUI() {
   document.getElementById('resetBtn').addEventListener('click', resetEditor);
   document.getElementById('onboardingBtn').addEventListener('click', () => els.shortcutsDialog.showModal());
   document.getElementById('closeShortcutsBtn').addEventListener('click', () => els.shortcutsDialog.close());
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveDefaults);
 
   els.canvas.addEventListener('click', handleCanvasClick);
   document.addEventListener('keydown', handleKeyboardShortcuts);
+}
+
+async function loadStoredSettings() {
+  const { studioSettings } = await chrome.storage.local.get('studioSettings');
+  if (!studioSettings) return;
+  state.settings.exportFormat = studioSettings.defaultFormat || state.settings.exportFormat;
+  state.settings.exportScale = studioSettings.exportScale || state.settings.exportScale;
+  document.getElementById('exportFormat').value = state.settings.exportFormat;
+  document.getElementById('exportScale').value = String(state.settings.exportScale);
+  document.getElementById('defaultExportFormat').value = state.settings.exportFormat;
+  document.getElementById('defaultExportScale').value = String(state.settings.exportScale);
+  if (studioSettings.theme && studioSettings.theme !== 'system') {
+    state.theme = studioSettings.theme;
+    document.documentElement.dataset.theme = state.theme;
+  }
+}
+
+async function saveDefaults() {
+  await chrome.runtime.sendMessage({
+    type: 'studio:update-settings',
+    settings: {
+      theme: state.theme,
+      exportScale: state.settings.exportScale,
+      defaultFormat: state.settings.exportFormat,
+      copyBehavior: 'clipboard+download',
+      onboardingSeen: true,
+      aiMathMode: 'metadata+image',
+      segmentation: 'auto'
+    }
+  });
+  setStatus('Saved studio defaults. Future captures will reuse these settings.');
+  pushHistory('Saved studio defaults');
 }
 
 async function restoreCapture() {
@@ -109,11 +150,12 @@ async function requestCapture(mode) {
   setBusy(`Capturing ${mode === 'full' ? 'full page' : 'visible area'}...`);
   const response = await chrome.runtime.sendMessage({ type: 'studio:capture', mode });
   if (!response?.ok) {
-    setBusy('Capture failed');
+    setStatus('Capture failed. Try again on a fully loaded page.');
     return;
   }
   await applyCapture(response.payload);
   pushHistory(`Captured ${mode === 'full' ? 'full page' : 'visible area'}`);
+  setStatus(`Capture ready. ${response.payload.metadata?.math?.count || 0} equations detected.`);
   clearBusy();
 }
 
@@ -285,6 +327,7 @@ function setTool(tool) {
     button.classList.toggle('active', button.dataset.tool === tool);
   });
   pushHistory(`Switched to ${titleCase(tool)} tool`);
+  setStatus(`${titleCase(tool)} tool selected.`);
   renderProperties();
 }
 
@@ -299,6 +342,7 @@ function handleCanvasClick(event) {
   state.overlays.push(overlay);
   state.future = [];
   pushHistory(`Added ${state.activeTool} annotation`);
+  setStatus(`Added ${state.activeTool} annotation.`);
   render();
 }
 
@@ -345,7 +389,8 @@ function snapshotState() {
     activeTool: state.activeTool,
     overlays: state.overlays,
     settings: state.settings,
-    capture: state.capture
+    capture: state.capture,
+    theme: state.theme
   });
 }
 
@@ -355,6 +400,7 @@ function undo() {
   state.future.push(current);
   const previous = state.history[state.history.length - 1];
   restoreSnapshot(previous.snapshot);
+  setStatus('Undid the last action.');
 }
 
 function redo() {
@@ -362,6 +408,7 @@ function redo() {
   if (!next) return;
   state.history.push(next);
   restoreSnapshot(next.snapshot);
+  setStatus('Redid the last action.');
 }
 
 function restoreSnapshot(snapshot) {
@@ -370,6 +417,8 @@ function restoreSnapshot(snapshot) {
   state.overlays = parsed.overlays;
   state.settings = parsed.settings;
   state.capture = parsed.capture;
+  state.theme = parsed.theme || state.theme;
+  document.documentElement.dataset.theme = state.theme;
   document.querySelectorAll('[data-tool]').forEach((button) => {
     button.classList.toggle('active', button.dataset.tool === state.activeTool);
   });
@@ -396,6 +445,7 @@ async function exportResult() {
   link.download = `fullpage-studio-${Date.now()}.${format === 'jpeg' ? 'jpg' : format}`;
   link.click();
   pushHistory(`Exported ${format.toUpperCase()} image`);
+  setStatus(`Exported ${format.toUpperCase()} result.`);
 }
 
 async function exportMathMetadata() {
@@ -424,6 +474,7 @@ async function exportMathMetadata() {
   link.click();
   URL.revokeObjectURL(url);
   pushHistory('Exported math metadata JSON');
+  setStatus('Exported AI-ready math metadata JSON.');
 }
 
 async function copyImage() {
@@ -431,6 +482,7 @@ async function copyImage() {
   const blob = await (await fetch(els.canvas.toDataURL('image/png'))).blob();
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
   pushHistory('Copied image to clipboard');
+  setStatus('Copied image to clipboard.');
 }
 
 async function shareResult() {
@@ -444,32 +496,41 @@ async function shareResult() {
     try {
       await navigator.share(payload);
       pushHistory('Opened native share flow');
+      setStatus('Opened native share flow.');
       return;
     } catch (_) {}
   }
   await navigator.clipboard.writeText(`${payload.title}\n${payload.url}`);
   pushHistory('Copied share link to clipboard');
+  setStatus('Copied share link to clipboard.');
 }
 
 function toggleTheme() {
   state.theme = state.theme === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = state.theme;
   pushHistory(`Switched to ${state.theme} theme`);
+  setStatus(`Switched to ${state.theme} theme.`);
 }
 
 function resetEditor() {
   state.overlays = buildSuggestedOverlays(state.capture || { metadata: { math: { equations: [] } } });
   state.future = [];
   pushHistory('Reset editor annotations');
+  setStatus('Reset annotations to the suggested defaults.');
   render();
 }
 
 function setBusy(label) {
   els.workspaceTitle.textContent = label;
+  setStatus(label);
 }
 
 function clearBusy() {
   render();
+}
+
+function setStatus(message) {
+  els.statusCard.textContent = message;
 }
 
 function handleKeyboardShortcuts(event) {

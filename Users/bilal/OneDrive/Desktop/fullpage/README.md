@@ -1,7 +1,55 @@
-# FullPage
+# FullPage Studio
 
 Full-page screenshot capture & editing extension for Chromium browsers
-(Chrome / Microsoft Edge).
+(Chrome / Microsoft Edge), redesigned as a lightweight professional editing
+studio.
+
+## What changed
+
+The extension now includes:
+
+- A modern studio-style editing workspace
+- Capture modes for visible-area and full-page workflows
+- Annotation tools for text, highlight, redaction, numbering, arrows, shapes,
+  blur placeholders, and crop/resize overlays
+- Undo / redo and keyboard shortcuts
+- Better copy, share, and export flows
+- Dark / light theme switching
+- Accessibility-friendly controls with reduced-motion support
+- Math-aware metadata export for AI workflows
+- Segmentation metadata for extremely long math-heavy captures
+- Edge Add-ons Store one-command release automation
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl/Cmd + Shift + S` | Capture visible area |
+| `Ctrl/Cmd + Shift + F` | Capture full page |
+| `V` | Select tool |
+| `C` | Crop tool |
+| `B` | Blur tool |
+| `H` | Highlight tool |
+| `R` | Redaction tool |
+| `T` | Rich text tool |
+| `Ctrl/Cmd + Z` | Undo |
+| `Ctrl/Cmd + Shift + Z` | Redo |
+
+## Math-aware export workflow
+
+For long mathematical pages, use **Capture full page** and then export the
+**JSON + Math Metadata** format. The JSON contains:
+
+- Extracted MathML when present
+- LaTeX hints / annotations when available
+- Text fallbacks for equations
+- Equation confidence scores
+- Segment metadata for long pages
+- Headings, tables, images, and landmarks for extra AI context
+- An AI-ready prompt hint
+
+This lets downstream AI systems combine the screenshot with structured metadata
+so equations are far less likely to be misread.
 
 ## Releasing to the Microsoft Edge Add-ons Store
 
