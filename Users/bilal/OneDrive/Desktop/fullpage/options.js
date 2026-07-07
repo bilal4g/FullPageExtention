@@ -1,30 +1,36 @@
-/* SnapScroll Pro - settings page logic. Stores prefs in chrome.storage.local. */
+/* SnapScroll Pro - options page */
 (function () {
-  const $ = (id) => document.getElementById(id);
-  const DEFAULTS = { scale: 2, tile: 1600, overlap: 90, delay: 400, autostudio: 1 };
+  'use strict';
+  var DEFAULTS = { format: 'png', hidpi: true, autostudio: true, math: true, theme: 'dark' };
+  var $ = function (id) { return document.getElementById(id); };
+  var saved = $('saved');
+
+  function flash(msg) { saved.textContent = msg || 'Saved'; clearTimeout(flash._t); flash._t = setTimeout(function () { saved.textContent = ''; }, 1400); }
 
   function load() {
-    chrome.storage.local.get('ss_settings', (d) => {
-      const s = Object.assign({}, DEFAULTS, (d && d.ss_settings) || {});
-      $('opt-scale').value = String(s.scale);
-      $('opt-tile').value = s.tile;
-      $('opt-overlap').value = s.overlap;
-      $('opt-delay').value = s.delay;
-      $('opt-autostudio').value = String(s.autostudio);
+    chrome.storage.local.get(Object.keys(DEFAULTS).map(function (k) { return 'ss_opt_' + k; }), function (d) {
+      $('opt-format').value = d.ss_opt_format || DEFAULTS.format;
+      $('opt-hidpi').checked = d.ss_opt_hidpi != null ? d.ss_opt_hidpi : DEFAULTS.hidpi;
+      $('opt-autostudio').checked = d.ss_opt_autostudio != null ? d.ss_opt_autostudio : DEFAULTS.autostudio;
+      $('opt-math').checked = d.ss_opt_math != null ? d.ss_opt_math : DEFAULTS.math;
+      $('opt-theme').value = d.ss_opt_theme || DEFAULTS.theme;
     });
   }
+
   function save() {
-    const s = {
-      scale: parseInt($('opt-scale').value, 10) || DEFAULTS.scale,
-      tile: parseInt($('opt-tile').value, 10) || DEFAULTS.tile,
-      overlap: parseInt($('opt-overlap').value, 10) || DEFAULTS.overlap,
-      delay: parseInt($('opt-delay').value, 10) || 0,
-      autostudio: parseInt($('opt-autostudio').value, 10)
-    };
-    chrome.storage.local.set({ ss_settings: s }, () => {
-      const el = $('saved'); el.textContent = 'Saved.';
-      setTimeout(() => (el.textContent = ''), 1600);
-    });
+    chrome.storage.local.set({
+      ss_opt_format: $('opt-format').value,
+      ss_opt_hidpi: $('opt-hidpi').checked,
+      ss_opt_autostudio: $('opt-autostudio').checked,
+      ss_opt_math: $('opt-math').checked,
+      ss_opt_theme: $('opt-theme').value
+    }, function () { flash('Saved'); });
   }
-  document.addEventListener('DOMContentLoaded', () => { load(); $('save').onclick = save; });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    load();
+    ['opt-format', 'opt-hidpi', 'opt-autostudio', 'opt-math', 'opt-theme'].forEach(function (id) {
+      $(id).addEventListener('change', save);
+    });
+  });
 })();

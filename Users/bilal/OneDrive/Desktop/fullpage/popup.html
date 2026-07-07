@@ -7,14 +7,22 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <!-- Main view -->
+  <!-- Main view (kept simple) -->
   <div id="main-view" class="view active">
     <div class="header">
       <div class="logo">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#lg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="lg" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 14h8"/></svg>
         <h1>SnapScroll Pro</h1>
       </div>
-      <div class="subtitle">Capture → opens in Studio</div>
+      <div class="subtitle">Capture → opens the Studio automatically</div>
+    </div>
+
+    <div class="format-section">
+      <span class="format-label">Format</span>
+      <div class="format-buttons">
+        <button class="format-btn active" data-format="png">PNG</button>
+        <button class="format-btn" data-format="pdf">PDF</button>
+      </div>
     </div>
 
     <button id="capture-btn" class="capture-btn">
@@ -41,12 +49,12 @@
     <div id="progress-status" class="progress-status">Preparing…</div>
   </div>
 
-  <!-- Result view (auto-opens Studio; this is a fallback) -->
+  <!-- Result view (kept as fallback; Studio opens automatically) -->
   <div id="result-view" class="view">
     <div class="result-preview"><canvas id="preview-canvas"></canvas></div>
-    <div id="result-info" class="result-info">Opening in Studio…</div>
+    <div id="result-info" class="result-info">Opening Studio…</div>
     <button id="studio-btn" class="capture-btn" style="margin-bottom:8px">Open in Studio</button>
-    <button id="download-btn" class="capture-btn download-btn" hidden><span id="download-label">Download PNG</span></button>
+    <button id="download-btn" class="capture-btn download-btn"><span id="download-label">Download PNG</span></button>
     <button id="retry-btn" class="secondary-btn">Capture Again</button>
   </div>
 

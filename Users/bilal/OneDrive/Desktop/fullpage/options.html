@@ -3,60 +3,76 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SnapScroll Pro – Settings</title>
-  <link rel="stylesheet" href="studio.css" />
+  <title>SnapScroll Pro — Settings</title>
   <style>
-    body { overflow:auto; }
-    .page { max-width:640px; margin:40px auto; padding:0 20px; }
-    .page h1 { font-size:24px; margin-bottom:6px; }
-    .page .sub { color:var(--text-muted); font-size:13px; margin-bottom:28px; }
-    .card { background:var(--bg-panel); border:1px solid var(--border-subtle); border-radius:14px; padding:20px; margin-bottom:18px; }
-    .card h2 { font-size:15px; margin-bottom:14px; }
-    .set-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border-subtle); }
-    .set-row:last-child { border-bottom:none; }
-    .set-row label { font-size:13px; color:var(--text-secondary); }
-    .set-row .desc { font-size:11px; color:var(--text-muted); margin-top:3px; }
-    select, input[type=number] { padding:7px 10px; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:8px; color:var(--text-primary); font:inherit; font-size:13px; min-width:120px; }
-    .save-bar { display:flex; gap:10px; align-items:center; }
+    :root{--bg:#0a0a1a;--panel:#111128;--card:rgba(255,255,255,.04);--card2:rgba(255,255,255,.08);--bd:rgba(255,255,255,.08);--bda:rgba(99,102,241,.5);--tp:#f1f5f9;--ts:#94a3b8;--tm:#64748b;--a1:#6366f1;--a2:#06b6d4;}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--tp);min-height:100vh;padding:48px 20px;}
+    .wrap{max-width:640px;margin:0 auto;}
+    .head{display:flex;align-items:center;gap:12px;margin-bottom:8px;}
+    .head h1{font-size:22px;font-weight:700;background:linear-gradient(135deg,var(--a1),var(--a2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+    .sub{color:var(--tm);font-size:13px;margin-bottom:32px;}
+    .card{background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:22px;margin-bottom:18px;}
+    .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin-bottom:16px;}
+    .field{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--bd);}
+    .field:last-child{border-bottom:none;}
+    .field .label{font-size:14px;color:var(--tp);}
+    .field .desc{font-size:12px;color:var(--tm);margin-top:3px;max-width:380px;line-height:1.5;}
+    select,input[type=number]{padding:8px 12px;background:var(--card);border:1px solid var(--bd);border-radius:9px;color:var(--tp);font:inherit;font-size:13px;min-width:120px;}
+    .switch{position:relative;width:46px;height:26px;flex:0 0 auto;}
+    .switch input{opacity:0;width:0;height:0;}
+    .slider{position:absolute;inset:0;background:var(--card2);border-radius:26px;cursor:pointer;transition:.2s;}
+    .slider::before{content:'';position:absolute;height:20px;width:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+    input:checked + .slider{background:linear-gradient(135deg,var(--a1),var(--a2));}
+    input:checked + .slider::before{transform:translateX(20px);}
+    .info{font-size:13px;color:var(--ts);line-height:1.6;}
+    .info b{color:var(--tp);}
+    .saved{font-size:12px;color:#10b981;height:16px;margin-top:8px;}
+    a{color:var(--a2);}
   </style>
 </head>
 <body>
-  <div class="page">
-    <h1>SnapScroll Pro Settings</h1>
-    <div class="sub">These open in a full browser tab. Everything is stored locally on your device.</div>
-
-    <div class="card">
-      <h2>AI-Ready export</h2>
-      <div class="set-row">
-        <div><label>Default sharpness</label><div class="desc">Higher = crisper equations, bigger files.</div></div>
-        <select id="opt-scale"><option value="2">Sharp (2x)</option><option value="3">Ultra (3x)</option><option value="4">Max (4x)</option></select>
-      </div>
-      <div class="set-row">
-        <div><label>Tile size (px)</label><div class="desc">Max width/height of each slice handed to the AI.</div></div>
-        <input type="number" id="opt-tile" min="600" max="3000" step="100" />
-      </div>
-      <div class="set-row">
-        <div><label>Tile overlap (px)</label><div class="desc">Overlap so no equation gets cut between tiles.</div></div>
-        <input type="number" id="opt-overlap" min="0" max="400" step="10" />
-      </div>
+  <div class="wrap">
+    <div class="head">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+      <h1>SnapScroll Pro</h1>
     </div>
+    <div class="sub">Settings</div>
 
     <div class="card">
       <h2>Capture</h2>
-      <div class="set-row">
-        <div><label>Capture delay (ms)</label><div class="desc">Wait before capturing (lets menus/animations settle).</div></div>
-        <input type="number" id="opt-delay" min="0" max="3000" step="100" />
+      <div class="field">
+        <div><div class="label">Default export format</div><div class="desc">Used by the download button and Studio export.</div></div>
+        <select id="opt-format"><option value="png">PNG</option><option value="jpg">JPG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select>
       </div>
-      <div class="set-row">
-        <div><label>Auto-open Studio after capture</label><div class="desc">Jump straight into editing.</div></div>
-        <select id="opt-autostudio"><option value="1">On</option><option value="0">Off</option></select>
+      <div class="field">
+        <div><div class="label">High-detail capture</div><div class="desc">Capture at the highest device pixel ratio so text and equations stay crisp for AI.</div></div>
+        <label class="switch"><input type="checkbox" id="opt-hidpi" checked /><span class="slider"></span></label>
+      </div>
+      <div class="field">
+        <div><div class="label">Open Studio after capture</div><div class="desc">Automatically open the editing Studio with the capture loaded.</div></div>
+        <label class="switch"><input type="checkbox" id="opt-autostudio" checked /><span class="slider"></span></label>
       </div>
     </div>
 
-    <div class="save-bar">
-      <button id="save" class="btn primary" style="flex:0 0 auto; padding:10px 24px">Save settings</button>
-      <span id="saved" class="set-status"></span>
+    <div class="card">
+      <h2>Math for AI</h2>
+      <div class="field">
+        <div><div class="label">Extract equations on capture</div><div class="desc">Reads the exact equation source (LaTeX / MathML) from the page itself so the AI gets real math text, not a blurry picture. 100% on-device, no API, no limits.</div></div>
+        <label class="switch"><input type="checkbox" id="opt-math" checked /><span class="slider"></span></label>
+      </div>
+      <div class="field"><div class="info">In the Studio, click <b>✨ Equations for AI</b> to copy an AI-ready prompt that pairs your screenshot with the exact equations. Then attach the image and paste — the AI reads every equation perfectly.</div></div>
     </div>
+
+    <div class="card">
+      <h2>Appearance</h2>
+      <div class="field">
+        <div><div class="label">Theme</div><div class="desc">Studio and popup color theme.</div></div>
+        <select id="opt-theme"><option value="dark">Dark</option><option value="light">Light</option></select>
+      </div>
+    </div>
+
+    <div class="saved" id="saved"></div>
   </div>
   <script src="options.js"></script>
 </body>
