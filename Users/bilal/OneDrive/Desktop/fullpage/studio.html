@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SnapScroll Studio</title>
+  <title>FullPage Studio</title>
   <link rel="stylesheet" href="studio.css" />
 </head>
 <body>
   <div id="app">
-    <!-- Top bar -->
     <header class="topbar">
       <div class="brand">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="url(#bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="bg" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
-        <span>SnapScroll <b>Studio</b></span>
+        <span>FullPage <b>Studio</b></span>
       </div>
       <div class="top-actions">
         <button id="btn-open" class="tbtn">Open</button>
         <button id="btn-paste" class="tbtn">Paste</button>
-        <button id="btn-ocr" class="tbtn accent">✨ Extract Text / Solve Math</button>
+        <button id="btn-eq" class="tbtn accent">∑ Equations</button>
+        <button id="btn-aiprompt" class="tbtn">Copy AI prompt</button>
         <div class="dropdown">
           <button id="btn-export" class="tbtn">Export ▾</button>
           <div class="menu" id="export-menu" hidden>
@@ -27,13 +27,13 @@
             <button data-exp="pdf">PDF document</button>
           </div>
         </div>
+        <button id="btn-segments" class="tbtn">Export segments</button>
         <button id="btn-copy" class="tbtn">Copy</button>
         <button id="btn-settings" class="tbtn icon" title="Settings">⚙</button>
       </div>
     </header>
 
     <div class="body">
-      <!-- Left tool rail -->
       <aside class="toolbar">
         <button class="tool active" data-tool="pan" title="Move / Pan (V)">✋</button>
         <button class="tool" data-tool="crop" title="Crop (C)">✂</button>
@@ -47,13 +47,12 @@
         <button class="tool" data-tool="redact" title="Redact / black box (X)">■</button>
       </aside>
 
-      <!-- Stage -->
       <main class="stage-wrap" id="stage-wrap">
         <div id="empty" class="empty">
           <div class="empty-card">
             <div class="empty-icon">🖼️</div>
-            <h2>Drop an image or PDF here</h2>
-            <p>Or paste from clipboard, or open a file. Captures from SnapScroll load here automatically.</p>
+            <h2>No capture loaded</h2>
+            <p>Capture a page from the extension popup, or drop / paste / open an image here.</p>
             <div class="empty-actions">
               <button id="empty-open" class="btn primary">Open file</button>
               <button id="empty-paste" class="btn">Paste</button>
@@ -69,26 +68,22 @@
         </div>
       </main>
 
-      <!-- Right options -->
       <aside class="options">
         <section class="opt-group">
+          <h3>Smart math layer</h3>
+          <p class="hint" id="math-summary">No capture loaded.</p>
+          <button id="btn-eq2" class="btn wide">View equations</button>
+        </section>
+
+        <section class="opt-group">
           <h3>History</h3>
-          <div class="row">
-            <button id="btn-undo" class="btn">↶ Undo</button>
-            <button id="btn-redo" class="btn">Redo ↷</button>
-          </div>
+          <div class="row"><button id="btn-undo" class="btn">↶ Undo</button><button id="btn-redo" class="btn">Redo ↷</button></div>
         </section>
 
         <section class="opt-group">
           <h3>Transform</h3>
-          <div class="row">
-            <button id="btn-rotl" class="btn">↺ 90°</button>
-            <button id="btn-rotr" class="btn">90° ↻</button>
-          </div>
-          <div class="row">
-            <button id="btn-fliph" class="btn">Flip H</button>
-            <button id="btn-flipv" class="btn">Flip V</button>
-          </div>
+          <div class="row"><button id="btn-rotl" class="btn">↺ 90°</button><button id="btn-rotr" class="btn">90° ↻</button></div>
+          <div class="row"><button id="btn-fliph" class="btn">Flip H</button><button id="btn-flipv" class="btn">Flip V</button></div>
           <button id="btn-resize" class="btn wide">Resize…</button>
         </section>
 
@@ -102,10 +97,7 @@
             <button class="chip" data-ar="3:4">3:4</button>
             <button class="chip" data-ar="a4">A4</button>
           </div>
-          <div class="row">
-            <button id="btn-crop-apply" class="btn primary">Apply crop</button>
-            <button id="btn-crop-cancel" class="btn">Cancel</button>
-          </div>
+          <div class="row"><button id="btn-crop-apply" class="btn primary">Apply crop</button><button id="btn-crop-cancel" class="btn">Cancel</button></div>
         </section>
 
         <section class="opt-group" id="grp-draw" hidden>
@@ -131,11 +123,8 @@
           <label class="field"><span>Color</span><input type="color" id="opt-textcolor" value="#ffffff" /></label>
           <label class="field checkbox"><input type="checkbox" id="opt-bold" /><span>Bold</span></label>
           <label class="field checkbox"><input type="checkbox" id="opt-textbg" /><span>Background</span></label>
-          <p class="hint">Pick the Text tool, click on the image, type, then Apply.</p>
-          <div class="row">
-            <button id="btn-text-apply" class="btn primary">Apply text</button>
-            <button id="btn-text-cancel" class="btn">Cancel</button>
-          </div>
+          <p class="hint">Pick Text, click the image, type, then Apply.</p>
+          <div class="row"><button id="btn-text-apply" class="btn primary">Apply text</button><button id="btn-text-cancel" class="btn">Cancel</button></div>
         </section>
       </aside>
     </div>
@@ -152,60 +141,32 @@
     </footer>
   </div>
 
-  <!-- OCR modal -->
-  <div id="ocr-modal" class="modal" hidden>
+  <div id="eq-modal" class="modal" hidden>
     <div class="modal-card wide">
-      <div class="modal-head"><h2>✨ Extract Text / Solve Math</h2><button class="x" data-close="ocr-modal">✕</button></div>
-      <div id="ocr-status" class="ocr-status">Reading the image…</div>
-      <div id="ocr-result" hidden>
-        <label class="lbl">LaTeX (equations preserved)</label>
-        <textarea id="ocr-latex" rows="6" readonly></textarea>
+      <div class="modal-head"><h2>∑ Equations extracted from the page</h2><button class="x" data-close="eq-modal">✕</button></div>
+      <p class="hint" id="eq-intro">These came straight from the page's HTML math markup (MathML / LaTeX). No image guessing, no API. Hand them to your AI alongside the screenshot.</p>
+      <div id="eq-empty" hidden><p class="hint">No machine-readable equations were found in this page's markup. Use <b>Export segments</b> so the AI sees each equation at full size.</p></div>
+      <div id="eq-body" hidden>
+        <label class="lbl">LaTeX</label>
+        <textarea id="eq-latex" rows="6" readonly></textarea>
         <label class="lbl">Plain text</label>
-        <textarea id="ocr-text" rows="5" readonly></textarea>
+        <textarea id="eq-text" rows="5" readonly></textarea>
         <div class="row">
-          <button id="ocr-copy-latex" class="btn primary">Copy LaTeX</button>
-          <button id="ocr-copy-prompt" class="btn">Copy as AI prompt</button>
-          <button id="ocr-copy-text" class="btn">Copy text</button>
+          <button id="eq-copy-prompt" class="btn primary">Copy as AI prompt</button>
+          <button id="eq-copy-latex" class="btn">Copy LaTeX</button>
+          <button id="eq-copy-text" class="btn">Copy text</button>
         </div>
       </div>
-      <div id="ocr-nocreds" hidden>
-        <p>To read math accurately, SnapScroll uses <b>Mathpix OCR</b>. Add your free Mathpix API keys once in Settings and equations will convert to real LaTeX text the AI can actually read.</p>
-        <button id="ocr-open-settings" class="btn primary">Open Settings</button>
-      </div>
     </div>
   </div>
 
-  <!-- Settings modal -->
-  <div id="settings-modal" class="modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head"><h2>Settings</h2><button class="x" data-close="settings-modal">✕</button></div>
-      <p class="hint">Mathpix OCR credentials. Stored locally in your browser only. Get them at accounts.mathpix.com.</p>
-      <label class="lbl">Mathpix App ID</label>
-      <input type="text" id="set-id" placeholder="app id" autocomplete="off" />
-      <label class="lbl">Mathpix App Key</label>
-      <input type="password" id="set-key" placeholder="app key" autocomplete="off" />
-      <div id="set-status" class="set-status"></div>
-      <div class="row">
-        <button id="set-save" class="btn primary">Save</button>
-        <button id="set-clear" class="btn">Clear</button>
-        <button class="btn" data-close="settings-modal">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Resize modal -->
   <div id="resize-modal" class="modal" hidden>
     <div class="modal-card">
       <div class="modal-head"><h2>Resize</h2><button class="x" data-close="resize-modal">✕</button></div>
-      <label class="lbl">Width (px)</label>
-      <input type="number" id="rz-w" min="1" />
-      <label class="lbl">Height (px)</label>
-      <input type="number" id="rz-h" min="1" />
+      <label class="lbl">Width (px)</label><input type="number" id="rz-w" min="1" />
+      <label class="lbl">Height (px)</label><input type="number" id="rz-h" min="1" />
       <label class="field checkbox"><input type="checkbox" id="rz-lock" checked /><span>Lock aspect ratio</span></label>
-      <div class="row">
-        <button id="rz-apply" class="btn primary">Apply</button>
-        <button class="btn" data-close="resize-modal">Cancel</button>
-      </div>
+      <div class="row"><button id="rz-apply" class="btn primary">Apply</button><button class="btn" data-close="resize-modal">Cancel</button></div>
     </div>
   </div>
 
