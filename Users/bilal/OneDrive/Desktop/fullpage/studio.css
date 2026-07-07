@@ -1,5 +1,8 @@
 :root{--bg-primary:#0a0a1a;--bg-secondary:#111128;--bg-panel:#0e0e22;--bg-card:rgba(255,255,255,.04);--bg-card-hover:rgba(255,255,255,.08);--border-subtle:rgba(255,255,255,.08);--border-active:rgba(99,102,241,.5);--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent-start:#6366f1;--accent-end:#06b6d4;}
 *{margin:0;padding:0;box-sizing:border-box;}
+/* The attribute always wins over any class display rule. Fixes modals/panels
+   with a `hidden` attribute rendering because .modal/.empty set display:flex. */
+[hidden]{display:none!important;}
 html,body{height:100%;}
 body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg-primary);color:var(--text-primary);overflow:hidden;}
 #app{display:flex;flex-direction:column;height:100vh;}
