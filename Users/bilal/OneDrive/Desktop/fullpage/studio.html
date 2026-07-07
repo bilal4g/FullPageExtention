@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SnapScroll Studio</title>
+  <title>FullPage Studio</title>
   <link rel="stylesheet" href="studio.css" />
 </head>
 <body>
@@ -11,15 +11,23 @@
     <header class="topbar">
       <div class="brand">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="url(#bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="bg" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
-        <span>SnapScroll <b>Studio</b></span>
+        <span>FullPage <b>Studio</b></span>
       </div>
       <div class="top-actions">
         <button id="btn-open" class="tbtn">Open</button>
         <button id="btn-paste" class="tbtn">Paste</button>
-        <button id="btn-airead" class="tbtn accent">✨ AI-Ready Export</button>
+        <button id="btn-math" class="tbtn accent">✨ Math for AI</button>
         <div class="dropdown">
           <button id="btn-export" class="tbtn">Export ▾</button>
           <div class="menu" id="export-menu" hidden>
+            <div class="menu-label">Scale</div>
+            <div class="scale-row">
+              <button class="scale-chip active" data-scale="1">1x</button>
+              <button class="scale-chip" data-scale="2">2x</button>
+              <button class="scale-chip" data-scale="4">4x</button>
+              <button class="scale-chip" data-scale="max">Max 8K</button>
+            </div>
+            <div class="menu-sep"></div>
             <button data-exp="png">PNG image</button>
             <button data-exp="jpg">JPG image</button>
             <button data-exp="webp">WebP image</button>
@@ -27,7 +35,7 @@
           </div>
         </div>
         <button id="btn-copy" class="tbtn">Copy</button>
-        <button id="btn-settings" class="tbtn icon" title="Settings (opens in a tab)">⚙</button>
+        <button id="btn-settings" class="tbtn icon" title="Settings">⚙</button>
       </div>
     </header>
 
@@ -42,15 +50,15 @@
         <button class="tool" data-tool="ellipse" title="Ellipse (O)">◯</button>
         <button class="tool" data-tool="highlight" title="Highlighter (H)">░</button>
         <button class="tool" data-tool="blur" title="Blur region (B)">▦</button>
-        <button class="tool" data-tool="redact" title="Redact / black box (X)">■</button>
+        <button class="tool" data-tool="redact" title="Redact (X)">■</button>
       </aside>
 
       <main class="stage-wrap" id="stage-wrap">
         <div id="empty" class="empty">
           <div class="empty-card">
             <div class="empty-icon">🖼️</div>
-            <h2>Drop an image here</h2>
-            <p>Or paste from clipboard, or open a file. Captures from SnapScroll load here automatically.</p>
+            <h2>Drop an image or PDF here</h2>
+            <p>Or paste, or open a file. Captures from the popup load here automatically.</p>
             <div class="empty-actions">
               <button id="empty-open" class="btn primary">Open file</button>
               <button id="empty-paste" class="btn">Paste</button>
@@ -69,25 +77,14 @@
       <aside class="options">
         <section class="opt-group">
           <h3>History</h3>
-          <div class="row">
-            <button id="btn-undo" class="btn">↶ Undo</button>
-            <button id="btn-redo" class="btn">Redo ↷</button>
-          </div>
+          <div class="row"><button id="btn-undo" class="btn">↶ Undo</button><button id="btn-redo" class="btn">Redo ↷</button></div>
         </section>
-
         <section class="opt-group">
           <h3>Transform</h3>
-          <div class="row">
-            <button id="btn-rotl" class="btn">↺ 90°</button>
-            <button id="btn-rotr" class="btn">90° ↻</button>
-          </div>
-          <div class="row">
-            <button id="btn-fliph" class="btn">Flip H</button>
-            <button id="btn-flipv" class="btn">Flip V</button>
-          </div>
+          <div class="row"><button id="btn-rotl" class="btn">↺ 90°</button><button id="btn-rotr" class="btn">90° ↻</button></div>
+          <div class="row"><button id="btn-fliph" class="btn">Flip H</button><button id="btn-flipv" class="btn">Flip V</button></div>
           <button id="btn-resize" class="btn wide">Resize…</button>
         </section>
-
         <section class="opt-group" id="grp-crop" hidden>
           <h3>Crop</h3>
           <div class="chips">
@@ -98,12 +95,8 @@
             <button class="chip" data-ar="3:4">3:4</button>
             <button class="chip" data-ar="a4">A4</button>
           </div>
-          <div class="row">
-            <button id="btn-crop-apply" class="btn primary">Apply crop</button>
-            <button id="btn-crop-cancel" class="btn">Cancel</button>
-          </div>
+          <div class="row"><button id="btn-crop-apply" class="btn primary">Apply crop</button><button id="btn-crop-cancel" class="btn">Cancel</button></div>
         </section>
-
         <section class="opt-group" id="grp-draw" hidden>
           <h3>Style</h3>
           <label class="field"><span>Stroke</span><input type="color" id="opt-stroke" value="#ef4444" /></label>
@@ -111,27 +104,14 @@
           <label class="field checkbox"><input type="checkbox" id="opt-fill" /><span>Fill shape</span></label>
           <label class="field"><span>Fill color</span><input type="color" id="opt-fillcolor" value="#6366f1" /></label>
         </section>
-
         <section class="opt-group" id="grp-text" hidden>
           <h3>Text</h3>
-          <label class="field"><span>Font</span>
-            <select id="opt-font">
-              <option value="Inter, sans-serif">Inter</option>
-              <option value="Arial, sans-serif">Arial</option>
-              <option value="Georgia, serif">Georgia</option>
-              <option value="'Courier New', monospace">Courier</option>
-              <option value="'Times New Roman', serif">Times</option>
-            </select>
-          </label>
+          <label class="field"><span>Font</span><select id="opt-font"><option value="Inter, sans-serif">Inter</option><option value="Arial, sans-serif">Arial</option><option value="Georgia, serif">Georgia</option><option value="'Courier New', monospace">Courier</option><option value="'Times New Roman', serif">Times</option></select></label>
           <label class="field"><span>Size</span><input type="number" id="opt-fontsize" min="8" max="200" value="32" /></label>
           <label class="field"><span>Color</span><input type="color" id="opt-textcolor" value="#ffffff" /></label>
           <label class="field checkbox"><input type="checkbox" id="opt-bold" /><span>Bold</span></label>
           <label class="field checkbox"><input type="checkbox" id="opt-textbg" /><span>Background</span></label>
-          <p class="hint">Pick the Text tool, click on the image, type, then Apply.</p>
-          <div class="row">
-            <button id="btn-text-apply" class="btn primary">Apply text</button>
-            <button id="btn-text-cancel" class="btn">Cancel</button>
-          </div>
+          <div class="row"><button id="btn-text-apply" class="btn primary">Apply text</button><button id="btn-text-cancel" class="btn">Cancel</button></div>
         </section>
       </aside>
     </div>
@@ -139,6 +119,7 @@
     <footer class="statusbar">
       <span id="status-tool">Move</span>
       <span id="status-dims">—</span>
+      <span id="status-math"></span>
       <div class="zoom">
         <button id="btn-fit" class="mini">Fit</button>
         <button id="btn-100" class="mini">100%</button>
@@ -148,46 +129,47 @@
     </footer>
   </div>
 
-  <!-- AI-Ready export modal -->
-  <div id="airead-modal" class="modal" hidden>
+  <div id="math-modal" class="modal" hidden>
     <div class="modal-card wide">
-      <div class="modal-head"><h2>✨ AI-Ready Export</h2><button class="x" data-close="airead-modal">✕</button></div>
-      <p class="hint">Big screenshots get shrunk by AI chat tools, so small math turns to mush. This slices your capture into crisp, high-res tiles (with overlap so nothing is cut) that the AI can read <b>without zooming</b>. No account, no API key, works for unlimited users. Hand the AI the PDF or the tiles.</p>
-      <label class="lbl">Sharpness</label>
-      <div class="chips" id="airead-quality">
-        <button class="chip active" data-scale="2">Sharp (2x)</button>
-        <button class="chip" data-scale="3">Ultra (3x)</button>
-        <button class="chip" data-scale="4">Max (4x)</button>
-      </div>
-      <label class="field checkbox"><input type="checkbox" id="airead-crop" /><span>Only the current crop selection</span></label>
+      <div class="modal-head"><h2>✨ Math for AI</h2><button class="x" data-close="math-modal">✕</button></div>
+      <p class="hint" id="math-intro"></p>
+      <div id="math-list" class="math-list"></div>
+      <label class="lbl">AI-ready bundle (paste this together with the image)</label>
+      <textarea id="math-bundle" rows="7" readonly></textarea>
       <div class="row">
-        <button id="airead-pdf" class="btn primary">Download AI PDF</button>
-        <button id="airead-tiles" class="btn">Download tiles</button>
+        <button id="math-copy-bundle" class="btn primary">Copy for AI</button>
+        <button id="math-copy-latex" class="btn">Copy LaTeX only</button>
+        <button class="btn" data-close="math-modal">Close</button>
       </div>
-      <div id="airead-status" class="set-status"></div>
     </div>
   </div>
 
-  <!-- Resize modal -->
+  <div id="settings-modal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h2>Settings</h2><button class="x" data-close="settings-modal">✕</button></div>
+      <p class="hint">Studio preferences. No API keys, no accounts. Everything runs locally in your browser.</p>
+      <label class="lbl">Default export scale</label>
+      <select id="set-scale"><option value="1">1x</option><option value="2" selected>2x</option><option value="4">4x</option><option value="max">Max 8K</option></select>
+      <label class="lbl">Default format</label>
+      <select id="set-format"><option value="png">PNG</option><option value="jpg">JPG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select>
+      <div class="row"><button id="set-save" class="btn primary">Save</button><button class="btn" data-close="settings-modal">Close</button></div>
+      <div id="set-status" class="set-status"></div>
+    </div>
+  </div>
+
   <div id="resize-modal" class="modal" hidden>
     <div class="modal-card">
       <div class="modal-head"><h2>Resize</h2><button class="x" data-close="resize-modal">✕</button></div>
-      <label class="lbl">Width (px)</label>
-      <input type="number" id="rz-w" min="1" />
-      <label class="lbl">Height (px)</label>
-      <input type="number" id="rz-h" min="1" />
+      <label class="lbl">Width (px)</label><input type="number" id="rz-w" min="1" />
+      <label class="lbl">Height (px)</label><input type="number" id="rz-h" min="1" />
       <label class="field checkbox"><input type="checkbox" id="rz-lock" checked /><span>Lock aspect ratio</span></label>
-      <div class="row">
-        <button id="rz-apply" class="btn primary">Apply</button>
-        <button class="btn" data-close="resize-modal">Cancel</button>
-      </div>
+      <div class="row"><button id="rz-apply" class="btn primary">Apply</button><button class="btn" data-close="resize-modal">Cancel</button></div>
     </div>
   </div>
 
   <input type="file" id="file-input" accept="image/*" hidden />
   <div id="toast" class="toast" hidden></div>
 
-  <script src="ocr.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>
