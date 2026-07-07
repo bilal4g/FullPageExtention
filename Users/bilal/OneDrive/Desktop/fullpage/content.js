@@ -3,20 +3,81 @@
   window.__fullPageStudioInjected = true;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === 'studio:collect-page-metadata') {
+    const type = message && message.type;
+    if (type === 'studio:collect-page-metadata') {
       sendResponse(collectPageMetadata(message.mode || 'visible'));
+      return; // sync
+    }
+    if (type === 'studio:prepare-capture') {
+      prepareForCapture();
+      sendResponse({ ok: true });
+      return;
+    }
+    if (type === 'studio:restore') {
+      restoreAfterCapture();
+      sendResponse({ ok: true });
+      return;
+    }
+    if (type === 'studio:scroll-to') {
+      window.scrollTo(0, message.y || 0);
+      setTimeout(() => sendResponse({ y: window.scrollY || document.documentElement.scrollTop || 0 }), 60);
+      return true; // async
+    }
+    if (type === 'studio:get-metrics') {
+      sendResponse(pageMetrics());
+      return;
     }
   });
 
-  function collectPageMetadata(mode) {
-    const equations = collectMathPayload();
-    const page = {
+  // ---- Full-page capture prep (hide fixed/sticky, add tail padding) ----
+  const restorers = [];
+  function prepareForCapture() {
+    if (window.__ss_prepared) return;
+    window.__ss_prepared = true;
+    restorers.length = 0;
+    const body = document.body;
+    if (body) {
+      const pad = parseFloat(getComputedStyle(body).paddingBottom) || 0;
+      restorers.push({ el: body, prop: 'paddingBottom', val: body.style.paddingBottom });
+      body.style.paddingBottom = (pad + 200) + 'px';
+    }
+    document.querySelectorAll('*').forEach((el) => {
+      let cs;
+      try { cs = getComputedStyle(el); } catch (e) { return; }
+      if (cs.position === 'fixed') {
+        restorers.push({ el, prop: 'display', val: el.style.display });
+        el.style.display = 'none';
+      } else if (cs.position === 'sticky') {
+        restorers.push({ el, prop: 'position', val: el.style.position });
+        el.style.position = 'static';
+      }
+      if (cs.backgroundAttachment === 'fixed') {
+        restorers.push({ el, prop: 'backgroundAttachment', val: el.style.backgroundAttachment });
+        el.style.backgroundAttachment = 'scroll';
+      }
+    });
+    window.__ss_scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  }
+  function restoreAfterCapture() {
+    if (!window.__ss_prepared) return;
+    window.__ss_prepared = false;
+    restorers.forEach((r) => { try { r.el.style[r.prop] = r.val; } catch (e) {} });
+    restorers.length = 0;
+    window.scrollTo(0, window.__ss_scrollY || 0);
+  }
+  function pageMetrics() {
+    return {
       scrollWidth: document.documentElement.scrollWidth,
-      scrollHeight: document.documentElement.scrollHeight,
+      scrollHeight: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       devicePixelRatio: window.devicePixelRatio || 1
     };
+  }
+
+  function collectPageMetadata(mode) {
+    const equations = collectMathPayload();
+    const page = pageMetrics();
 
     const suggestedSegmentHeight = Math.max(window.innerHeight, 1600);
     const segmentCount = mode === 'full'
@@ -77,8 +138,8 @@
           ? node.outerHTML
           : node.querySelector('math')?.outerHTML || node.getAttribute('data-mathml') || '';
         const latex = node.getAttribute('data-latex')
-          || node.getAttribute('aria-label')
           || node.querySelector('annotation[encoding="application/x-tex"]')?.textContent
+          || node.getAttribute('aria-label')
           || inferLatex(text);
         return {
           id: `eq-${index + 1}`,
@@ -122,35 +183,32 @@
   function inferLatex(text) {
     if (!text) return '';
     return text
-      .replace(/×/g, ' \\times ')
-      .replace(/÷/g, ' \\div ')
-      .replace(/≤/g, ' \\leq ')
-      .replace(/≥/g, ' \\geq ')
-      .replace(/√/g, ' \\sqrt{} ')
-      .replace(/π/g, ' \\pi ')
-      .replace(/∞/g, ' \\infty ')
-      .replace(/∑/g, ' \\sum ')
-      .replace(/∫/g, ' \\int ')
-      .replace(/≈/g, ' \\approx ')
+      .replace(/\u00d7/g, ' \\times ')
+      .replace(/\u00f7/g, ' \\div ')
+      .replace(/\u2264/g, ' \\leq ')
+      .replace(/\u2265/g, ' \\geq ')
+      .replace(/\u221a/g, ' \\sqrt{} ')
+      .replace(/\u03c0/g, ' \\pi ')
+      .replace(/\u221e/g, ' \\infty ')
+      .replace(/\u2211/g, ' \\sum ')
+      .replace(/\u222b/g, ' \\int ')
+      .replace(/\u2248/g, ' \\approx ')
       .trim();
   }
 
   function calculateConfidence({ text, latex, mathMl }) {
     let score = 0.2;
-    if (text?.length > 0) score += 0.2;
-    if (latex?.length > 0) score += 0.25;
-    if (mathMl?.length > 0) score += 0.35;
+    if (text && text.length > 0) score += 0.2;
+    if (latex && latex.length > 0) score += 0.25;
+    if (mathMl && mathMl.length > 0) score += 0.35;
     if ((latex || '').includes('\\')) score += 0.1;
     return Math.min(1, Number(score.toFixed(2)));
   }
 
   function readSelection() {
-    const selection = window.getSelection?.();
+    const selection = window.getSelection && window.getSelection();
     return selection && String(selection).trim()
-      ? {
-          text: String(selection).trim(),
-          rangeCount: selection.rangeCount
-        }
+      ? { text: String(selection).trim(), rangeCount: selection.rangeCount }
       : null;
   }
 
@@ -167,11 +225,7 @@
   function collectHeadings() {
     return Array.from(document.querySelectorAll('h1, h2, h3, h4'))
       .slice(0, 60)
-      .map((node, index) => ({
-        id: `heading-${index + 1}`,
-        level: node.tagName.toLowerCase(),
-        text: clean(node.textContent)
-      }));
+      .map((node, index) => ({ id: `heading-${index + 1}`, level: node.tagName.toLowerCase(), text: clean(node.textContent) }));
   }
 
   function collectTables() {
@@ -180,7 +234,7 @@
       .map((table, index) => ({
         id: `table-${index + 1}`,
         rows: table.rows.length,
-        columns: table.rows[0]?.cells.length || 0,
+        columns: (table.rows[0] && table.rows[0].cells.length) || 0,
         preview: clean(table.innerText).slice(0, 500)
       }));
   }
@@ -188,13 +242,7 @@
   function collectImages() {
     return Array.from(document.images)
       .slice(0, 30)
-      .map((img, index) => ({
-        id: `img-${index + 1}`,
-        src: img.currentSrc || img.src,
-        alt: img.alt || '',
-        width: img.naturalWidth,
-        height: img.naturalHeight
-      }));
+      .map((img, index) => ({ id: `img-${index + 1}`, src: img.currentSrc || img.src, alt: img.alt || '', width: img.naturalWidth, height: img.naturalHeight }));
   }
 
   function collectThemeTokens() {
