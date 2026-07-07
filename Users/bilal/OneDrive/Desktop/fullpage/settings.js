@@ -1,34 +1,28 @@
-/* FullPage Studio - settings page (opens as a full browser tab). */
+/* SnapScroll Pro - settings (full options page). Stored locally, no API. */
 (function () {
   const $ = (id) => document.getElementById(id);
-  const DEFAULTS = { theme: 'system', exportScale: 2, defaultFormat: 'png', aiMathMode: 'metadata+image', segmentation: 'auto' };
+  const DEFAULTS = { tileH: 1400, scale: 1, includeTranscript: true, defaultFormat: 'png' };
 
-  function load() {
-    chrome.storage.local.get(['studioSettings'], (d) => {
-      const s = Object.assign({}, DEFAULTS, d.studioSettings || {});
-      $('set-format').value = s.defaultFormat;
-      $('set-scale').value = String(s.exportScale);
-      $('set-theme').value = s.theme;
-      $('set-mathmode').value = s.aiMathMode;
-      $('set-seg').value = s.segmentation;
-    });
+  function apply(s) {
+    $('tileH').value = s.tileH; $('tileH-val').textContent = s.tileH;
+    $('scale').value = s.scale; $('scale-val').textContent = s.scale + 'x';
+    $('includeTranscript').checked = !!s.includeTranscript;
+    $('defaultFormat').value = s.defaultFormat;
   }
-
-  function save() {
-    const settings = {
-      defaultFormat: $('set-format').value,
-      exportScale: parseInt($('set-scale').value, 10),
-      theme: $('set-theme').value,
-      aiMathMode: $('set-mathmode').value,
-      segmentation: $('set-seg').value
+  function read() {
+    return {
+      tileH: parseInt($('tileH').value, 10) || DEFAULTS.tileH,
+      scale: parseFloat($('scale').value) || DEFAULTS.scale,
+      includeTranscript: $('includeTranscript').checked,
+      defaultFormat: $('defaultFormat').value
     };
-    chrome.runtime.sendMessage({ type: 'studio:update-settings', settings }, () => {
-      const el = $('save-status');
-      el.textContent = 'Saved \u2713';
-      setTimeout(() => (el.textContent = ''), 1800);
-    });
   }
+  function flashSaved() { const el = $('saved'); el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 1500); }
 
-  $('save').addEventListener('click', save);
-  load();
+  $('tileH').addEventListener('input', () => ($('tileH-val').textContent = $('tileH').value));
+  $('scale').addEventListener('input', () => ($('scale-val').textContent = $('scale').value + 'x'));
+  $('save').addEventListener('click', () => { chrome.storage.local.set({ ss_settings: read() }, flashSaved); });
+  $('reset').addEventListener('click', () => { apply(DEFAULTS); chrome.storage.local.set({ ss_settings: DEFAULTS }, flashSaved); });
+
+  chrome.storage.local.get(['ss_settings'], (d) => { apply(Object.assign({}, DEFAULTS, (d && d.ss_settings) || {})); });
 })();

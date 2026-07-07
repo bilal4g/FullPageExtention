@@ -3,76 +3,78 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FullPage Studio — Settings</title>
-  <link rel="stylesheet" href="studio.css" />
+  <title>SnapScroll Pro — Settings</title>
   <style>
-    body { overflow:auto; }
-    .settings-page { max-width:680px; margin:0 auto; padding:48px 24px; }
-    .settings-page h1 { font-size:24px; margin-bottom:4px; background:linear-gradient(135deg,#6366f1,#06b6d4); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
-    .settings-page .lead { color:#94a3b8; font-size:13px; margin-bottom:28px; }
-    .card { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:20px 22px; margin-bottom:18px; }
-    .card h2 { font-size:15px; margin-bottom:14px; }
-    .set-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
-    .set-row:last-child { border-bottom:none; }
-    .set-row .k { font-size:13px; color:#f1f5f9; }
-    .set-row .k small { display:block; color:#64748b; font-size:11px; margin-top:2px; }
-    select, input[type=number] { padding:8px 10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:9px; color:#f1f5f9; font:inherit; font-size:13px; min-width:150px; }
-    .save-bar { display:flex; gap:10px; align-items:center; }
-    .save-status { font-size:12px; color:#10b981; }
-    .pill { display:inline-block; font-size:11px; color:#06b6d4; border:1px solid rgba(6,182,212,.4); border-radius:999px; padding:2px 10px; margin-bottom:16px; }
+    :root{--bg:#0a0a1a;--panel:#111128;--card:rgba(255,255,255,.04);--card-h:rgba(255,255,255,.08);--bd:rgba(255,255,255,.08);--bd-a:rgba(99,102,241,.5);--tx:#f1f5f9;--tx2:#94a3b8;--tx3:#64748b;--a1:#6366f1;--a2:#06b6d4;}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;padding:48px 20px;}
+    .wrap{max-width:640px;margin:0 auto;}
+    .head{display:flex;align-items:center;gap:12px;margin-bottom:8px;}
+    .head h1{font-size:24px;font-weight:700;background:linear-gradient(135deg,var(--a1),var(--a2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+    .sub{color:var(--tx3);font-size:14px;margin-bottom:32px;}
+    .card{background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:24px;margin-bottom:20px;}
+    .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:18px;}
+    .field{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--bd);}
+    .field:last-child{border-bottom:none;}
+    .field .label{font-size:14px;}
+    .field .desc{font-size:12px;color:var(--tx3);margin-top:2px;max-width:340px;line-height:1.5;}
+    input[type=number],select{width:130px;padding:9px 11px;background:var(--card);border:1px solid var(--bd);border-radius:9px;color:var(--tx);font:inherit;font-size:13px;}
+    input[type=range]{width:180px;}
+    .switch{position:relative;width:46px;height:26px;flex:0 0 auto;}
+    .switch input{opacity:0;width:0;height:0;}
+    .slider{position:absolute;inset:0;background:var(--card-h);border-radius:20px;cursor:pointer;transition:.2s;}
+    .slider:before{content:'';position:absolute;height:20px;width:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+    .switch input:checked + .slider{background:linear-gradient(135deg,var(--a1),var(--a2));}
+    .switch input:checked + .slider:before{transform:translateX(20px);}
+    .actions{display:flex;gap:12px;margin-top:8px;}
+    .btn{padding:12px 22px;border:1px solid var(--bd);border-radius:11px;background:var(--card);color:var(--tx2);font:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:.18s;}
+    .btn:hover{background:var(--card-h);color:var(--tx);}
+    .btn.primary{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;border:none;}
+    .saved{color:#10b981;font-size:13px;align-self:center;opacity:0;transition:.2s;}
+    .saved.show{opacity:1;}
+    .rowval{display:flex;align-items:center;gap:10px;}
+    .rowval b{min-width:52px;text-align:right;font-size:13px;color:var(--tx2);}
+    .note{font-size:12px;color:var(--tx3);line-height:1.6;margin-top:6px;}
   </style>
 </head>
 <body>
-  <div class="settings-page">
-    <span class="pill">No API keys · works offline · unlimited users</span>
-    <h1>FullPage Studio Settings</h1>
-    <div class="lead">These preferences apply every time you capture and open the Studio.</div>
-
-    <div class="card">
-      <h2>Export defaults</h2>
-      <div class="set-row">
-        <div class="k">Default format<small>Used by the Studio export button</small></div>
-        <select id="set-format">
-          <option value="png">PNG</option>
-          <option value="jpg">JPEG</option>
-          <option value="webp">WebP</option>
-          <option value="pdf">PDF</option>
-        </select>
-      </div>
-      <div class="set-row">
-        <div class="k">Export scale<small>Higher = sharper, larger files</small></div>
-        <select id="set-scale"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select>
-      </div>
+  <div class="wrap">
+    <div class="head">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+      <h1>SnapScroll Pro Settings</h1>
     </div>
+    <p class="sub">Everything runs on your machine. No account, no API key, no limits.</p>
 
     <div class="card">
-      <h2>Appearance</h2>
-      <div class="set-row">
-        <div class="k">Theme</div>
-        <select id="set-theme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select>
+      <h2>AI-Readable Math</h2>
+      <div class="field">
+        <div><div class="label">Slice height (px)</div><div class="desc">Tall captures are cut into tiles this tall so an AI never has to zoom to read equations. Smaller = more readable, more files.</div></div>
+        <div class="rowval"><input type="range" id="tileH" min="800" max="3000" step="100" value="1400" /><b id="tileH-val">1400</b></div>
+      </div>
+      <div class="field">
+        <div><div class="label">Export scale</div><div class="desc">Multiplier applied to exported slices. 2x gives crisper text for dense math pages.</div></div>
+        <div class="rowval"><input type="range" id="scale" min="1" max="3" step="0.5" value="1" /><b id="scale-val">1x</b></div>
+      </div>
+      <div class="field">
+        <div><div class="label">Include equation transcript</div><div class="desc">Also save a text file of the page's equations in LaTeX to paste alongside the image.</div></div>
+        <label class="switch"><input type="checkbox" id="includeTranscript" checked /><span class="slider"></span></label>
       </div>
     </div>
 
     <div class="card">
-      <h2>Math for AI</h2>
-      <div class="set-row">
-        <div class="k">Math delivery<small>How equations are handed to the AI. All options are key-less and local.</small></div>
-        <select id="set-mathmode">
-          <option value="metadata+image">Equation text + image (recommended)</option>
-          <option value="metadata">Equation text only</option>
-          <option value="image">Image only</option>
-        </select>
-      </div>
-      <div class="set-row">
-        <div class="k">Long-page segmentation<small>Slice tall captures so equations stay readable</small></div>
-        <select id="set-seg"><option value="auto">Auto</option><option value="always">Always</option><option value="never">Never</option></select>
+      <h2>Defaults</h2>
+      <div class="field">
+        <div><div class="label">Default quick-download format</div><div class="desc">Used by the popup's Quick download button.</div></div>
+        <select id="defaultFormat"><option value="png">PNG</option><option value="jpg">JPG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select>
       </div>
     </div>
 
-    <div class="save-bar">
-      <button id="save" class="btn primary" style="max-width:160px">Save settings</button>
-      <span id="save-status" class="save-status"></span>
+    <div class="actions">
+      <button id="save" class="btn primary">Save settings</button>
+      <button id="reset" class="btn">Reset to defaults</button>
+      <span id="saved" class="saved">✓ Saved</span>
     </div>
+    <p class="note">Tip: on a math-heavy page, use <b>Capture Full Page</b>, then in the Studio hit <b>Make AI-Readable</b> to grab the equation transcript and export readable slices.</p>
   </div>
   <script src="settings.js"></script>
 </body>
