@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FullPage Studio",
-  "version": "1.5.0",
-  "description": "Full-page screenshot capture with a pro editing Studio, API-free AI-readable math extraction, offline math OCR, and PDF support.",
+  "version": "1.6.0",
+  "description": "Full-page screenshot capture with a pro editing Studio, API-free AI-readable math, offline math OCR, and PDF support.",
   "permissions": ["activeTab", "scripting", "tabs", "storage", "unlimitedStorage", "clipboardWrite"],
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -13,11 +13,13 @@
   "options_page": "options.html",
   "background": { "service_worker": "background.js" },
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle" }],
+  "sandbox": { "pages": ["sandbox.html"] },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts allow-same-origin; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co https://cdn-lfs.huggingface.co https://cdn-lfs-us-1.huggingface.co; img-src 'self' data: blob:; style-src 'unsafe-inline';"
   },
   "web_accessible_resources": [
-    { "resources": ["studio.html", "studio.js", "studio.css", "pdf-render.js", "mathocr.js", "lib/*"], "matches": ["<all_urls>"] }
+    { "resources": ["studio.html", "studio.js", "studio.css", "sandbox.html", "sandbox.js", "sandbox-bridge.js", "pdf-render.js", "mathocr.js"], "matches": ["<all_urls>"] }
   ],
   "commands": {
     "capture-visible": {
