@@ -58,7 +58,7 @@
           <div class="empty-card">
             <div class="empty-icon">🖼️</div>
             <h2>Drop an image or PDF here</h2>
-            <p>Or paste, or open a file. Captures from the popup load here automatically.</p>
+            <p>Or paste, or open a file. Captures from the popup load here automatically. PDFs render page by page.</p>
             <div class="empty-actions">
               <button id="empty-open" class="btn primary">Open file</button>
               <button id="empty-paste" class="btn">Paste</button>
@@ -133,6 +133,10 @@
     <div class="modal-card wide">
       <div class="modal-head"><h2>✨ Math for AI</h2><button class="x" data-close="math-modal">✕</button></div>
       <p class="hint" id="math-intro"></p>
+      <div class="row">
+        <button id="math-read-image" class="btn primary">🧠 Read image math (offline AI)</button>
+      </div>
+      <p class="hint" id="math-ocr-status"></p>
       <div id="math-list" class="math-list"></div>
       <label class="lbl">AI-ready bundle (paste this together with the image)</label>
       <textarea id="math-bundle" rows="7" readonly></textarea>
@@ -167,9 +171,11 @@
     </div>
   </div>
 
-  <input type="file" id="file-input" accept="image/*" hidden />
+  <input type="file" id="file-input" accept="image/*,application/pdf" hidden />
   <div id="toast" class="toast" hidden></div>
 
+  <script src="ocr-model.js"></script>
+  <script src="pdf-render.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>
