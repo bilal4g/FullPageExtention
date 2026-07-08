@@ -1,4 +1,4 @@
-/* FullPage Studio - editor engine (offline; optional local AI for image math). */
+/* FullPage Studio - editor engine (no external APIs). */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -25,7 +25,7 @@
   const DRAW_TOOLS = ['pen', 'arrow', 'rect', 'ellipse', 'highlight', 'blur', 'redact'];
   const MAX_SIDE = 7680;
 
-  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2600); }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2200); }
   function opts() { return { stroke: $('opt-stroke').value, width: parseInt($('opt-width').value, 10) || 4, fill: $('opt-fill').checked, fillColor: $('opt-fillcolor').value }; }
   function coords(e) { const r = overlay.getBoundingClientRect(); const sx = work.width / r.width, sy = work.height / r.height; return { x: Math.max(0, Math.min(work.width, (e.clientX - r.left) * sx)), y: Math.max(0, Math.min(work.height, (e.clientY - r.top) * sy)) }; }
   function loadImage(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
@@ -57,6 +57,7 @@
       const s = d[SETTINGS_KEY] || {};
       if (s.exportScale) { exportScale = s.exportScale === 'max' ? 'max' : Number(s.exportScale); $('set-scale').value = String(s.exportScale); markScale(); }
       if (s.defaultFormat) { exportFormat = s.defaultFormat; $('set-format').value = s.defaultFormat; }
+      if (s.ocrModel) $('set-ocr').value = s.ocrModel;
     });
     chrome.storage.local.get([CAP_KEY], async (d) => {
       const cap = d[CAP_KEY];
@@ -212,64 +213,47 @@
   function buildBundle() {
     if (!equations.length) return '';
     const lines = [
-      'You are given a screenshot plus the exact math it contains, transcribed as LaTeX (ground truth \u2014 trust it over what you think you see in the image).',
-      'Task: read every equation carefully, then answer/solve each one. Show working step by step and give a clear final answer. For multiple choice, state the chosen option.',
+      'You are given a screenshot plus the exact math it contains, transcribed as LaTeX directly from the page source (this is ground truth \u2014 trust it over anything you think you see in the image).',
+      'Task: read every equation carefully, then answer/solve each one. Show your working step by step and give a clear final answer. If a question is multiple choice, state the chosen option.',
       '',
       'Equations, in reading order:'
     ];
-    equations.forEach((e, i) => { const body = e.latex || e.text || '(equation ' + (i + 1) + ', see image)'; lines.push((i + 1) + '. ' + (e.type === 'display' ? '[display] ' : '') + (e.source === 'ocr' ? '(read from image) ' : '') + body); });
+    equations.forEach((e, i) => {
+      const body = e.latex || e.text || '(equation ' + (i + 1) + ', see image)';
+      lines.push((i + 1) + '. ' + (e.type === 'display' ? '[display] ' : '') + body);
+    });
     return lines.join('\n');
   }
-  function renderMathList() {
-    const list = $('math-list'); list.innerHTML = '';
-    equations.forEach((e, i) => { const row = document.createElement('div'); row.className = 'eq-row'; row.innerHTML = '<span class="eq-n">' + (i + 1) + '</span><code>' + escapeHtml(e.latex || e.text || '(see image)') + '</code>'; list.appendChild(row); });
-    $('math-bundle').value = buildBundle();
-  }
   function openMath() {
+    const list = $('math-list'); list.innerHTML = '';
     $('math-ocr-status').textContent = '';
     if (!equations.length) {
-      $('math-intro').textContent = 'No machine-readable math found in the page source. Draw a crop box around the equations (optional), then hit \u201cRead image math (offline AI)\u201d below, or Export at Max 8K and send the image.';
+      $('math-intro').textContent = 'No machine-readable math was found in this page\u2019s source (the equations are likely baked into images). Use \u201cRead image with offline AI\u201d below to OCR them into LaTeX, or Export at Max 8K and send the sharp image with the prompt.';
       $('math-bundle').value = [
         'The attached image is a high-resolution screenshot containing math questions.',
         'Carefully read each equation directly from the image, transcribing symbols, exponents, fractions, subscripts and operators exactly.',
-        'Then solve every question, showing working step by step, and give a clear final answer for each. For multiple choice, state the chosen option.'
+        'Then solve every question, showing your working step by step, and give a clear final answer for each. For multiple-choice, state the chosen option.',
+        'If any symbol is genuinely ambiguous, note the most likely reading and proceed.'
       ].join('\n');
-      $('math-list').innerHTML = '';
     } else {
-      $('math-intro').textContent = equations.length + ' equation' + (equations.length === 1 ? '' : 's') + ' from the page source. You can also add image-only math with the button below.';
-      renderMathList();
+      $('math-intro').textContent = equations.length + ' equation' + (equations.length === 1 ? '' : 's') + ' pulled straight from the page source \u2014 no API, no limits. Copy the bundle and paste it with your image. You can also OCR image-based math below.';
+      renderEqList();
+      $('math-bundle').value = buildBundle();
     }
     openModal('math-modal');
   }
-  async function readImageMath() {
-    if (host.hidden) { toast('Load an image first'); return; }
-    const status = $('math-ocr-status');
-    if (!window.FPMathOCR) { status.textContent = 'OCR engine not loaded.'; return; }
-    const available = await window.FPMathOCR.isAvailable();
-    if (!available) {
-      status.innerHTML = 'Offline AI model not installed yet. Run <b>setup-models.cmd</b> (Windows) or <b>setup-models.sh</b> (Mac/Linux) in the extension folder once, then reload. Until then, use Export at Max 8K.';
-      return;
-    }
-    status.textContent = 'Loading model\u2026 (first run downloads once, then it\u2019s instant)';
-    try {
-      const src = regionOrWholeDataUrl();
-      const { latex } = await window.FPMathOCR.recognize(src, (p) => {
-        if (p && p.status === 'progress' && p.file) status.textContent = 'Loading model: ' + p.file + ' ' + (p.progress ? Math.round(p.progress) + '%' : '');
-        else if (p && p.status) status.textContent = 'Model: ' + p.status + '\u2026';
-      });
-      if (latex && latex.trim()) {
-        equations.push({ id: 'eq-' + (equations.length + 1), type: 'display', latex: latex.trim(), text: '', source: 'ocr', confidence: 0.8 });
-        updateMathStatus(); renderMathList();
-        status.textContent = 'Recognized \u2713  Added to the bundle below.';
-        toast('Math recognized from image');
-      } else { status.textContent = 'Could not read math from that region. Try a tighter crop.'; }
-    } catch (err) {
-      status.textContent = (err && err.code === 'NO_MODEL')
-        ? 'Model not installed. Run setup-models once, then reload.'
-        : 'Recognition failed: ' + ((err && err.message) || 'error') + '. Try a tighter crop.';
-    }
+  function renderEqList() {
+    const list = $('math-list'); list.innerHTML = '';
+    equations.forEach((e, i) => {
+      const row = document.createElement('div'); row.className = 'eq-row';
+      row.innerHTML = '<span class="eq-n">' + (i + 1) + '</span><code>' + escapeHtml(e.latex || e.text || '(see image)') + '</code>';
+      list.appendChild(row);
+    });
   }
-  function regionOrWholeDataUrl() {
+  function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+  // ---- Offline OCR on the current image / crop ----
+  function regionDataUrl() {
     if (cropSel && cropSel.w > 4 && cropSel.h > 4) {
       const nc = document.createElement('canvas'); nc.width = Math.round(cropSel.w); nc.height = Math.round(cropSel.h);
       nc.getContext('2d').drawImage(work, cropSel.x, cropSel.y, cropSel.w, cropSel.h, 0, 0, nc.width, nc.height);
@@ -277,7 +261,27 @@
     }
     return work.toDataURL('image/png');
   }
-  function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+  async function runImageOcr() {
+    if (host.hidden) { toast('Load an image first'); return; }
+    if (!window.FPOCR) { $('math-ocr-status').textContent = 'OCR engine not installed (see lib/README).'; return; }
+    const st = $('math-ocr-status');
+    st.textContent = 'Loading model\u2026 first run downloads it once.';
+    try {
+      const res = await window.FPOCR.run(regionDataUrl(), (p) => {
+        if (p.status === 'progress' && p.file) st.textContent = 'Downloading ' + p.file + ' ' + (p.progress ? Math.round(p.progress) + '%' : '');
+        else if (p.status) st.textContent = p.status + '\u2026';
+      });
+      const latex = (res && res.latex) || '';
+      if (!latex) { st.textContent = 'No math detected in the image.'; return; }
+      st.textContent = 'Done. Added to the bundle below.';
+      const eq = { id: 'eq-ocr-' + (equations.length + 1), type: 'display', latex, text: latex, confidence: 0.7, bounds: { y: 0 }, source: 'ocr' };
+      equations.push(eq); updateMathStatus(); renderEqList();
+      $('math-bundle').value = buildBundle();
+    } catch (err) {
+      if (err && err.code === 'MISSING_LIB') st.textContent = 'OCR library missing. Drop lib/transformers.min.js in (see lib/README).';
+      else st.textContent = 'OCR failed: ' + ((err && err.message) || 'error') + '. Try a tighter crop.';
+    }
+  }
 
   function openModal(id) { $(id).hidden = false; }
   function closeModal(id) { $(id).hidden = true; }
@@ -285,28 +289,20 @@
   function markScale() { document.querySelectorAll('.scale-chip').forEach((c) => c.classList.toggle('active', c.dataset.scale === String(exportScale))); }
 
   function saveSettings() {
-    const scale = $('set-scale').value; const format = $('set-format').value;
+    const scale = $('set-scale').value; const format = $('set-format').value; const ocrModel = $('set-ocr').value.trim();
     exportScale = scale === 'max' ? 'max' : Number(scale); exportFormat = format; markScale();
-    chrome.storage.local.set({ [SETTINGS_KEY]: { exportScale: scale, defaultFormat: format } }, () => { $('set-status').textContent = 'Saved.'; toast('Settings saved'); setTimeout(() => ($('set-status').textContent = ''), 1500); });
+    const payload = { exportScale: scale, defaultFormat: format }; if (ocrModel) payload.ocrModel = ocrModel;
+    chrome.storage.local.set({ [SETTINGS_KEY]: payload }, () => { $('set-status').textContent = 'Saved.'; toast('Settings saved'); setTimeout(() => ($('set-status').textContent = ''), 1500); });
   }
 
-  // ---- File / PDF input ----
   async function handleFile(file) {
     if (!file) return;
     const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
     if (isPdf) {
-      if (!window.FPPdf || !(await window.FPPdf.isAvailable())) {
-        toast('PDF support needs setup: run setup-models once, then reload.');
-        return;
-      }
+      if (!window.FPPDF) { toast('PDF engine not installed (see lib/README)'); return; }
       toast('Rendering PDF\u2026');
-      try {
-        const url = await window.FPPdf.renderToDataUrl(file, { scale: 2, onProgress: (p) => toast('Rendering PDF page ' + p.page + '/' + p.total) });
-        equations = [];
-        updateMathStatus();
-        await setFromSource(url);
-        toast('PDF loaded');
-      } catch (e) { toast('Could not render PDF: ' + ((e && e.message) || 'error')); }
+      try { const url = await window.FPPDF.fileToImage(file, 2); if (url) { equations = []; updateMathStatus(); await setFromSource(url); toast('PDF loaded'); } else toast('Empty PDF'); }
+      catch (e) { toast(e && e.message === 'MISSING_LIB' ? 'Add lib/pdf.min.js (see lib/README)' : 'Could not render PDF'); }
       return;
     }
     const fr = new FileReader(); fr.onload = () => { equations = []; updateMathStatus(); setFromSource(fr.result); }; fr.readAsDataURL(file);
@@ -333,7 +329,7 @@
     $('file-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) handleFile(f); e.target.value = ''; });
     $('btn-paste').onclick = pasteFromClipboard; $('empty-paste').onclick = pasteFromClipboard;
     $('btn-math').onclick = openMath;
-    $('math-read-image').onclick = readImageMath;
+    $('math-ocr-run').onclick = runImageOcr;
     $('math-copy-bundle').onclick = () => copyText($('math-bundle').value, 'Copied for AI');
     $('math-copy-latex').onclick = () => copyText(equations.map((e, i) => (i + 1) + '. ' + (e.latex || e.text || '')).join('\n'), 'LaTeX copied');
     $('btn-export').onclick = (e) => { e.stopPropagation(); $('export-menu').hidden = !$('export-menu').hidden; };

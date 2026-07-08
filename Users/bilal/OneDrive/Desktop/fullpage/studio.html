@@ -134,9 +134,9 @@
       <div class="modal-head"><h2>✨ Math for AI</h2><button class="x" data-close="math-modal">✕</button></div>
       <p class="hint" id="math-intro"></p>
       <div class="row">
-        <button id="math-read-image" class="btn primary">🧠 Read image math (offline AI)</button>
+        <button id="math-ocr-run" class="btn primary">🧠 Read image with offline AI</button>
+        <span id="math-ocr-status" class="set-status"></span>
       </div>
-      <p class="hint" id="math-ocr-status"></p>
       <div id="math-list" class="math-list"></div>
       <label class="lbl">AI-ready bundle (paste this together with the image)</label>
       <textarea id="math-bundle" rows="7" readonly></textarea>
@@ -156,6 +156,8 @@
       <select id="set-scale"><option value="1">1x</option><option value="2" selected>2x</option><option value="4">4x</option><option value="max">Max 8K</option></select>
       <label class="lbl">Default format</label>
       <select id="set-format"><option value="png">PNG</option><option value="jpg">JPG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select>
+      <label class="lbl">Offline OCR model (advanced)</label>
+      <input type="text" id="set-ocr" placeholder="Xenova/nougat-small" autocomplete="off" />
       <div class="row"><button id="set-save" class="btn primary">Save</button><button class="btn" data-close="settings-modal">Close</button></div>
       <div id="set-status" class="set-status"></div>
     </div>
@@ -174,8 +176,8 @@
   <input type="file" id="file-input" accept="image/*,application/pdf" hidden />
   <div id="toast" class="toast" hidden></div>
 
-  <script src="ocr-model.js"></script>
   <script src="pdf-render.js"></script>
+  <script src="mathocr.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>
