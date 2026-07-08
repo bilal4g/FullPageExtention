@@ -1,65 +1,59 @@
-/* FullPage Studio - PDF -> image rendering via pdf.js (bundled in vendor/).
- * Chrome's built-in PDF viewer blocks extensions from scrolling/injecting, so
- * we don't screenshot it. Instead we render the PDF ourselves, page by page,
- * onto canvases and stitch them into one tall image for the Studio.
- * Exposes window.FPPdf.renderToDataUrl(fileOrArrayBuffer, {scale, onProgress}). */
+/* FullPage Studio - PDF renderer.
+ * Renders a PDF file into a single tall stitched image using pdf.js, so PDFs
+ * can be opened, edited and exported inside the Studio. This sidesteps
+ * Chrome's built-in PDF viewer, which extensions cannot scroll or capture.
+ *
+ * Requires the pdf.js library dropped into lib/ (see lib/README.md):
+ *   lib/pdf.min.js  and  lib/pdf.worker.min.js
+ * Exposes: window.FPPDF.fileToImage(file, scale) -> Promise<dataURL|null>
+ */
 (function () {
-  'use strict';
-  const LIB = 'vendor/pdf.min.mjs';
-  const WORKER = 'vendor/pdf.worker.min.mjs';
-  let pdfjs = null;
+  let loading = null;
 
-  function fileExists(url) { return fetch(url, { method: 'HEAD' }).then((r) => r.ok).catch(() => false); }
-
-  async function ensureLib() {
-    if (pdfjs) return pdfjs;
-    const libUrl = chrome.runtime.getURL(LIB);
-    if (!(await fileExists(libUrl))) { const e = new Error('NO_PDFJS'); e.code = 'NO_PDFJS'; throw e; }
-    pdfjs = await import(libUrl);
-    pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(WORKER);
-    return pdfjs;
+  function loadLib() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    if (loading) return loading;
+    loading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = chrome.runtime.getURL('lib/pdf.min.js');
+      s.onload = () => {
+        const lib = window.pdfjsLib || (window.pdfjsDistBuildPdf && window.pdfjsDistBuildPdf);
+        if (!lib) { reject(new Error('pdf.js loaded but pdfjsLib not found')); return; }
+        try { lib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js'); } catch (e) {}
+        resolve(lib);
+      };
+      s.onerror = () => reject(new Error('MISSING_LIB'));
+      document.head.appendChild(s);
+    });
+    return loading;
   }
 
-  async function toArrayBuffer(input) {
-    if (input instanceof ArrayBuffer) return input;
-    if (input instanceof Blob) return await input.arrayBuffer();
-    throw new Error('Unsupported PDF input');
-  }
-
-  // Render all pages, stitch vertically into one PNG dataURL.
-  async function renderToDataUrl(input, opts = {}) {
-    const scale = opts.scale || 2;            // 2x for crisp text/math
-    const gap = opts.gap == null ? 16 : opts.gap;
-    const lib = await ensureLib();
-    const data = await toArrayBuffer(input);
-    const doc = await lib.getDocument({ data }).promise;
-
+  async function fileToImage(file, scale) {
+    const lib = await loadLib();
+    const buf = await file.arrayBuffer();
+    const pdf = await lib.getDocument({ data: buf }).promise;
+    const s = scale || 2; // render at 2x for crisp text/math
     const pages = [];
-    let maxW = 0, totalH = 0;
-    for (let i = 1; i <= doc.numPages; i++) {
-      if (opts.onProgress) opts.onProgress({ page: i, total: doc.numPages });
-      const page = await doc.getPage(i);
-      const viewport = page.getViewport({ scale });
+    let totalH = 0, maxW = 0;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const vp = page.getViewport({ scale: s });
       const c = document.createElement('canvas');
-      c.width = Math.ceil(viewport.width); c.height = Math.ceil(viewport.height);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
       pages.push(c);
-      maxW = Math.max(maxW, c.width);
-      totalH += c.height + (i < doc.numPages ? gap : 0);
+      totalH += c.height; maxW = Math.max(maxW, c.width);
     }
-
+    if (!pages.length) return null;
+    const gap = 16;
     const out = document.createElement('canvas');
-    out.width = maxW; out.height = totalH;
-    const octx = out.getContext('2d');
-    octx.fillStyle = '#e5e7eb'; octx.fillRect(0, 0, out.width, out.height); // page gutter
+    out.width = maxW; out.height = totalH + gap * (pages.length - 1);
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, out.width, out.height);
     let y = 0;
-    for (const c of pages) { octx.drawImage(c, Math.round((maxW - c.width) / 2), y); y += c.height + gap; }
+    for (const p of pages) { ctx.drawImage(p, Math.round((maxW - p.width) / 2), y); y += p.height + gap; }
     return out.toDataURL('image/png');
   }
 
-  async function isAvailable() { return fileExists(chrome.runtime.getURL(LIB)); }
-
-  window.FPPdf = { renderToDataUrl, isAvailable };
+  window.FPPDF = { fileToImage, isAvailable: () => !!window.pdfjsLib || true };
 })();
