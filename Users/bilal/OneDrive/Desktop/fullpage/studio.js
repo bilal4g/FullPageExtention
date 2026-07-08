@@ -15,36 +15,30 @@
   const sctx = stage.getContext('2d');
   const octx = overlay.getContext('2d');
 
-  // Base (flattened) image lives on `work`. Objects render on top, live.
   const work = document.createElement('canvas');
   const wctx = work.getContext('2d', { willReadFrequently: true });
 
   let zoom = 1, tool = 'select';
-  let objects = [];       // live editable objects
-  let selId = null;       // selected object id
-  let uid = 1;
-  let drag = null;        // active drag state
-  let cropSel = null, cropAR = null;
-  let editingText = null; // DOM node while editing text
+  let objects = [], selId = null, uid = 1, drag = null;
+  let cropSel = null, cropAR = null, editingText = null;
   let history = [], redoStack = [];
   let equations = [], exportScale = 2, exportFormat = 'png';
-  const MAX_SIDE = 7680;
-  const HANDLE = 9;
-
+  let clip = null; // internal object clipboard
+  const MAX_SIDE = 7680, HANDLE = 9;
   const SHAPE_TOOLS = ['pen', 'arrow', 'line', 'rect', 'ellipse', 'highlight', 'blur', 'redact'];
 
   function toast(m) { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2200); }
   function newStyle() { return { stroke: $('opt-stroke').value, width: parseInt($('opt-width').value, 10) || 4, fill: $('opt-fill').checked, fillColor: $('opt-fillcolor').value }; }
   function loadImage(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
   function coords(e) { const r = overlay.getBoundingClientRect(); return { x: (e.clientX - r.left) * (work.width / r.width), y: (e.clientY - r.top) * (work.height / r.height) }; }
+  function coordsRaw(e) { const r = overlay.getBoundingClientRect(); return { x: (e.clientX - r.left) * (work.width / r.width), y: (e.clientY - r.top) * (work.height / r.height) }; }
   function sel() { return objects.find((o) => o.id === selId) || null; }
 
-  // ---------- load ----------
-  async function setBase(src, keepObjects) {
+  async function setBase(src) {
     const img = await loadImage(src);
     work.width = img.naturalWidth || img.width; work.height = img.naturalHeight || img.height;
     wctx.clearRect(0, 0, work.width, work.height); wctx.drawImage(img, 0, 0);
-    if (!keepObjects) { objects = []; selId = null; }
+    objects = []; selId = null;
     emptyEl.hidden = true; host.hidden = false;
     syncSizes(); fitZoom(); render(); history = []; redoStack = []; snapshot(); updateDims();
   }
@@ -76,7 +70,6 @@
     });
   }
 
-  // ---------- sizing / zoom ----------
   function syncSizes() { stage.width = work.width; stage.height = work.height; overlay.width = work.width; overlay.height = work.height; applyZoom(zoom, true); }
   function applyZoom(z, silent) {
     zoom = Math.max(0.1, Math.min(4, z));
@@ -87,11 +80,10 @@
     if (!silent) $('zoom-range').value = Math.round(zoom * 100);
   }
   function fitZoom() { const pad = 72; applyZoom(Math.min((stageWrap.clientWidth - pad) / work.width, (stageWrap.clientHeight - pad) / work.height, 1) || 1); }
-  function updateDims() { $('status-dims').textContent = work.width + ' \u00d7 ' + work.height + ' px'; }
+  function updateDims(extra) { $('status-dims').textContent = (extra || (work.width + ' \u00d7 ' + work.height)) + ' px'; }
   function updateMathStatus() { const n = equations.length; $('status-math').textContent = n ? (n + ' equation' + (n === 1 ? '' : 's') + ' detected') : ''; }
 
-  // ---------- object drawing ----------
-  function drawObject(ctx, o) {
+  function drawObjectRaw(ctx, o) {
     ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.strokeStyle = o.stroke || '#ef4444'; ctx.lineWidth = o.width || 4;
     ctx.fillStyle = o.fill ? (o.fillColor || '#6366f1') : (o.stroke || '#ef4444');
@@ -112,6 +104,7 @@
     else if (o.type === 'text') { drawText(ctx, o); }
     ctx.restore();
   }
+  function drawObject(ctx, o) { if (o._hidden) return; drawObjectRaw(ctx, o); }
   function drawBlur(ctx, o) {
     const x = Math.min(o.x, o.x + o.w), y = Math.min(o.y, o.y + o.h), w = Math.abs(o.w), h = Math.abs(o.h);
     if (w < 2 || h < 2) return;
@@ -130,10 +123,7 @@
     if (o.bg) { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(o.x - 4, o.y - 2, o.w, o.h); }
     ctx.fillStyle = o.color || '#ffffff'; lines.forEach((l, i) => ctx.fillText(l, o.x, o.y + i * lh));
   }
-  function bbox(o) {
-    if (o.type === 'line' || o.type === 'arrow') return { x: Math.min(o.x, o.x + o.w), y: Math.min(o.y, o.y + o.h), w: Math.abs(o.w), h: Math.abs(o.h) };
-    return { x: Math.min(o.x, o.x + o.w), y: Math.min(o.y, o.y + o.h), w: Math.abs(o.w), h: Math.abs(o.h) };
-  }
+  function bbox(o) { return { x: Math.min(o.x, o.x + o.w), y: Math.min(o.y, o.y + o.h), w: Math.abs(o.w), h: Math.abs(o.h) }; }
 
   function render() {
     sctx.clearRect(0, 0, stage.width, stage.height);
@@ -144,29 +134,33 @@
   function drawSelection() {
     octx.clearRect(0, 0, overlay.width, overlay.height);
     if (cropSel) { drawCropOverlay(); return; }
-    const o = sel(); if (!o) return;
-    const b = bbox(o); const s = HANDLE / zoom;
-    octx.save(); octx.strokeStyle = '#6366f1'; octx.lineWidth = 1.5 / zoom; octx.setLineDash([4 / zoom, 3 / zoom]);
-    octx.strokeRect(b.x, b.y, b.w, b.h); octx.setLineDash([]);
-    octx.fillStyle = '#fff'; octx.strokeStyle = '#6366f1';
-    handlePoints(b).forEach((p) => { octx.beginPath(); octx.rect(p.x - s / 2, p.y - s / 2, s, s); octx.fill(); octx.stroke(); });
-    octx.restore();
+    const o = sel();
+    if (o) {
+      const b = bbox(o); const s = HANDLE / zoom;
+      octx.save(); octx.strokeStyle = '#6366f1'; octx.lineWidth = 1.5 / zoom; octx.setLineDash([4 / zoom, 3 / zoom]);
+      octx.strokeRect(b.x, b.y, b.w, b.h); octx.setLineDash([]);
+      octx.fillStyle = '#fff'; octx.strokeStyle = '#6366f1';
+      handlePoints(b).forEach((p) => { octx.beginPath(); octx.rect(p.x - s / 2, p.y - s / 2, s, s); octx.fill(); octx.stroke(); });
+      octx.restore();
+    } else if (tool === 'select' && !host.hidden) {
+      // base-image resize handles (cyan) at the SE region
+      const s = (HANDLE + 1) / zoom; octx.save(); octx.fillStyle = '#06b6d4'; octx.strokeStyle = '#0a0a1a'; octx.lineWidth = 1 / zoom;
+      baseHandlePoints().forEach((p) => { octx.beginPath(); octx.rect(p.x - s / 2, p.y - s / 2, s, s); octx.fill(); octx.stroke(); });
+      octx.restore();
+    }
   }
   function handlePoints(b) { return [ { k: 'nw', x: b.x, y: b.y }, { k: 'ne', x: b.x + b.w, y: b.y }, { k: 'sw', x: b.x, y: b.y + b.h }, { k: 'se', x: b.x + b.w, y: b.y + b.h } ]; }
-  function hitHandle(o, p) { const b = bbox(o); const s = (HANDLE + 4) / zoom; return handlePoints(b).find((hp) => Math.abs(p.x - hp.x) <= s && Math.abs(p.y - hp.y) <= s) || null; }
-  function hitObject(p) {
-    for (let i = objects.length - 1; i >= 0; i--) { const b = bbox(objects[i]); const pad = 6 / zoom; if (p.x >= b.x - pad && p.x <= b.x + b.w + pad && p.y >= b.y - pad && p.y <= b.y + b.h + pad) return objects[i]; }
-    return null;
-  }
+  function baseHandlePoints() { const W = work.width, H = work.height; return [ { k: 'se', x: W, y: H }, { k: 'e', x: W, y: H / 2 }, { k: 's', x: W / 2, y: H } ]; }
+  function hitHandle(o, p) { const b = bbox(o); const s = (HANDLE + 5) / zoom; return handlePoints(b).find((hp) => Math.abs(p.x - hp.x) <= s && Math.abs(p.y - hp.y) <= s) || null; }
+  function hitBaseHandle(p) { const s = (HANDLE + 6) / zoom; return baseHandlePoints().find((hp) => Math.abs(p.x - hp.x) <= s && Math.abs(p.y - hp.y) <= s) || null; }
+  function hitObject(p) { for (let i = objects.length - 1; i >= 0; i--) { const b = bbox(objects[i]); const pad = 6 / zoom; if (p.x >= b.x - pad && p.x <= b.x + b.w + pad && p.y >= b.y - pad && p.y <= b.y + b.h + pad) return objects[i]; } return null; }
 
-  // ---------- history ----------
   function snapshot() { try { history.push(JSON.stringify({ base: work.toDataURL('image/png'), objects })); } catch (e) {} if (history.length > 25) history.shift(); redoStack = []; }
   async function restore(json) { const st = JSON.parse(json); objects = st.objects || []; selId = null; await setBaseSilent(st.base); render(); refreshInspector(); }
   async function setBaseSilent(src) { const img = await loadImage(src); work.width = img.width; work.height = img.height; wctx.clearRect(0, 0, work.width, work.height); wctx.drawImage(img, 0, 0); syncSizes(); updateDims(); }
   async function undo() { if (history.length < 2) return; redoStack.push(history.pop()); await restore(history[history.length - 1]); }
   async function redo() { if (!redoStack.length) return; const j = redoStack.pop(); history.push(j); await restore(j); }
 
-  // ---------- tools ----------
   function setTool(t) {
     commitText();
     tool = t;
@@ -174,25 +168,26 @@
     $('grp-crop').hidden = t !== 'crop';
     $('status-tool').textContent = ({ select: 'Select', crop: 'Crop', text: 'Text', pen: 'Pen', arrow: 'Arrow', line: 'Line', rect: 'Rectangle', ellipse: 'Ellipse', highlight: 'Highlight', blur: 'Blur', redact: 'Redact' })[t] || t;
     overlay.style.cursor = t === 'select' ? 'default' : (t === 'text' ? 'text' : 'crosshair');
-    if (t !== 'crop') { cropSel = null; }
+    if (t !== 'crop') cropSel = null;
     if (t !== 'select') { selId = null; refreshInspector(); }
     render();
   }
 
-  // ---------- pointer ----------
   overlay.addEventListener('pointerdown', (e) => {
+    if (e.button === 2) return; // right-click handled by contextmenu
+    hideCtx();
     overlay.setPointerCapture(e.pointerId); const p = coords(e);
     if (tool === 'crop') { drag = { crop: true, a: p }; cropSel = { x: p.x, y: p.y, w: 0, h: 0 }; return; }
     if (tool === 'text') { addText(p); return; }
     if (tool === 'select') {
       const o = sel();
       if (o) { const hp = hitHandle(o, p); if (hp) { drag = { resize: true, o, k: hp.k, start: p, o0: { x: o.x, y: o.y, w: o.w, h: o.h } }; return; } }
+      if (!o) { const bh = hitBaseHandle(coordsRaw(e)); if (bh) { drag = { canvasResize: true, k: bh.k, startW: work.width, startH: work.height }; return; } }
       const hit = hitObject(p);
       if (hit) { selId = hit.id; refreshInspector(); drag = { move: true, o: hit, start: p, o0: { x: hit.x, y: hit.y } }; render(); }
       else { selId = null; refreshInspector(); drag = { pan: true, sx: e.clientX, sy: e.clientY, sl: stageWrap.scrollLeft, st: stageWrap.scrollTop }; render(); }
       return;
     }
-    // shape tools: start a new object
     if (SHAPE_TOOLS.includes(tool)) {
       const st = newStyle();
       const o = { id: uid++, type: tool, x: p.x, y: p.y, w: 0, h: 0, stroke: st.stroke, width: st.width, fill: st.fill, fillColor: st.fillColor };
@@ -203,15 +198,27 @@
   overlay.addEventListener('pointermove', (e) => {
     if (!drag) return; const p = coords(e);
     if (drag.pan) { stageWrap.scrollLeft = drag.sl - (e.clientX - drag.sx); stageWrap.scrollTop = drag.st - (e.clientY - drag.sy); return; }
+    if (drag.canvasResize) {
+      const r = coordsRaw(e); let nW = drag.startW, nH = drag.startH;
+      if (drag.k === 'se' || drag.k === 'e') nW = Math.max(20, Math.round(r.x));
+      if (drag.k === 'se' || drag.k === 's') nH = Math.max(20, Math.round(r.y));
+      if (e.shiftKey && drag.k === 'se') { const ratio = drag.startW / drag.startH; nH = Math.round(nW / ratio); }
+      // live preview via CSS only (cheap); commit on release
+      stage.style.width = overlay.style.width = scaler.style.width = Math.round(nW * zoom) + 'px';
+      stage.style.height = overlay.style.height = scaler.style.height = Math.round(nH * zoom) + 'px';
+      drag.nW = nW; drag.nH = nH; updateDims(nW + ' \u00d7 ' + nH);
+      return;
+    }
     if (drag.crop) { let w = p.x - drag.a.x, h = p.y - drag.a.y; if (cropAR) h = Math.sign(h || 1) * Math.abs(w) / cropAR; cropSel = { x: Math.min(drag.a.x, drag.a.x + w), y: Math.min(drag.a.y, drag.a.y + h), w: Math.abs(w), h: Math.abs(h) }; drawSelection(); return; }
-    if (drag.create) { const o = drag.o; if (o.pts) { o.pts.push({ x: p.x - o.x, y: p.y - o.y }); } else { o.w = p.x - o.x; o.h = p.y - o.y; } render(); return; }
+    if (drag.create) { const o = drag.o; if (o.pts) o.pts.push({ x: p.x - o.x, y: p.y - o.y }); else { o.w = p.x - o.x; o.h = p.y - o.y; } render(); return; }
     if (drag.move) { const o = drag.o; o.x = drag.o0.x + (p.x - drag.start.x); o.y = drag.o0.y + (p.y - drag.start.y); render(); return; }
     if (drag.resize) { resizeObj(drag, p); render(); return; }
   });
   overlay.addEventListener('pointerup', () => {
     if (!drag) return;
+    if (drag.canvasResize) { if (drag.nW && drag.nH) resizeTo(drag.nW, drag.nH); else render(); drag = null; return; }
     if (drag.create) { const o = drag.o; if (!o.pts && Math.abs(o.w) < 3 && Math.abs(o.h) < 3) { objects = objects.filter((x) => x !== o); selId = null; } else { setTool('select'); selId = o.id; } refreshInspector(); snapshot(); }
-    else if (drag.move || drag.resize) { snapshot(); }
+    else if (drag.move || drag.resize) snapshot();
     else if (drag.crop) { drag = null; return; }
     drag = null; render();
   });
@@ -224,11 +231,10 @@
     o.w = w; o.h = h;
   }
 
-  // ---------- text ----------
+  // ---- text ----
   function addText(p) {
-    commitText();
-    const st = newStyle();
-    const o = { id: uid++, type: 'text', x: p.x, y: p.y, w: 60, h: 40, text: 'Text', size: parseInt($('opt-width').value, 10) > 0 ? 32 : 32, font: 'Inter, sans-serif', color: st.stroke, bold: false, bg: false };
+    commitText(); const st = newStyle();
+    const o = { id: uid++, type: 'text', x: p.x, y: p.y, w: 60, h: 40, text: 'Text', size: 32, font: 'Inter, sans-serif', color: st.stroke, bold: false, bg: false };
     objects.push(o); selId = o.id; setTool('select'); refreshInspector(); startTextEdit(o); snapshot();
   }
   function startTextEdit(o) {
@@ -237,8 +243,7 @@
     el.style.left = (o.x * zoom) + 'px'; el.style.top = (o.y * zoom) + 'px';
     el.style.fontFamily = o.font; el.style.fontSize = (o.size * zoom) + 'px'; el.style.color = o.color; el.style.fontWeight = o.bold ? '700' : '400';
     el.style.background = o.bg ? 'rgba(0,0,0,0.55)' : 'transparent';
-    textLayer.appendChild(el); editingText = { el, o };
-    o._hidden = true; render();
+    textLayer.appendChild(el); editingText = { el, o }; o._hidden = true; render();
     setTimeout(() => { el.focus(); const r = document.createRange(); r.selectNodeContents(el); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }, 0);
     el.addEventListener('blur', commitText);
   }
@@ -248,13 +253,9 @@
     if (!o.text.trim()) { objects = objects.filter((x) => x !== o); if (selId === o.id) selId = null; }
     render(); refreshInspector();
   }
-  // hide text object while its DOM editor is open
-  const _drawObject = drawObject;
-  drawObject = function (ctx, o) { if (o._hidden) return; _drawObject(ctx, o); };
-
   overlay.addEventListener('dblclick', (e) => { if (tool !== 'select') return; const o = hitObject(coords(e)); if (o && o.type === 'text') { selId = o.id; startTextEdit(o); } });
 
-  // ---------- inspector ----------
+  // ---- inspector ----
   function refreshInspector() {
     const o = sel();
     $('grp-inspector').hidden = !o; $('grp-newstyle').hidden = !!o;
@@ -270,27 +271,74 @@
   }
   function inspEdit(fn) { const o = sel(); if (!o) return; fn(o); render(); }
 
-  // ---------- crop / transform (re-bake base) ----------
+  // ---- object clipboard / actions ----
+  function copyObj() { const o = sel(); if (!o) return; clip = JSON.parse(JSON.stringify(o)); toast('Copied'); }
+  function cutObj() { const o = sel(); if (!o) return; clip = JSON.parse(JSON.stringify(o)); objects = objects.filter((x) => x !== o); selId = null; refreshInspector(); render(); snapshot(); toast('Cut'); }
+  function pasteObj() { if (!clip) { toast('Nothing to paste'); return; } const c = JSON.parse(JSON.stringify(clip)); c.id = uid++; c.x += 18; c.y += 18; objects.push(c); selId = c.id; setTool('select'); refreshInspector(); render(); snapshot(); }
+  function dupObj() { const o = sel(); if (!o) return; const c = JSON.parse(JSON.stringify(o)); c.id = uid++; c.x += 16; c.y += 16; objects.push(c); selId = c.id; refreshInspector(); render(); snapshot(); }
+  function delObj() { const o = sel(); if (!o) return; objects = objects.filter((x) => x !== o); selId = null; refreshInspector(); render(); snapshot(); }
+  function bringFront() { const o = sel(); if (!o) return; const i = objects.indexOf(o); if (i < objects.length - 1) { objects.splice(i, 1); objects.push(o); render(); snapshot(); } }
+  function sendBack() { const o = sel(); if (!o) return; const i = objects.indexOf(o); if (i > 0) { objects.splice(i, 1); objects.unshift(o); render(); snapshot(); } }
+
+  // ---- right-click context menu ----
+  const ctx = document.createElement('div'); ctx.className = 'ctxmenu'; ctx.hidden = true; document.body.appendChild(ctx);
+  function hideCtx() { ctx.hidden = true; }
+  function showCtx(clientX, clientY) {
+    const o = sel(); const items = [];
+    if (o) {
+      items.push(['Copy', 'Ctrl+C', copyObj]);
+      items.push(['Cut', 'Ctrl+X', cutObj]);
+      items.push(['Duplicate', 'Ctrl+D', dupObj]);
+      items.push(['Delete', 'Del', delObj]);
+      items.push(['sep']);
+      items.push(['Bring to front', '', bringFront]);
+      items.push(['Send to back', '', sendBack]);
+      items.push(['sep']);
+    }
+    items.push(['Paste', 'Ctrl+V', pasteObj, !clip]);
+    items.push(['sep']);
+    items.push(['Copy image', '', copyToClipboard]);
+    items.push(['Export PNG', '', () => exportAs('png')]);
+    ctx.innerHTML = '';
+    items.forEach((it) => {
+      if (it[0] === 'sep') { const s = document.createElement('div'); s.className = 'sep'; ctx.appendChild(s); return; }
+      const b = document.createElement('button'); b.disabled = !!it[3];
+      b.innerHTML = '<span>' + it[0] + '</span>' + (it[1] ? '<kbd>' + it[1] + '</kbd>' : '');
+      b.onclick = () => { hideCtx(); it[2](); };
+      ctx.appendChild(b);
+    });
+    ctx.style.left = Math.min(clientX, window.innerWidth - 200) + 'px';
+    ctx.style.top = Math.min(clientY, window.innerHeight - ctx.offsetHeight - 10) + 'px';
+    ctx.hidden = false;
+    ctx.style.top = Math.min(clientY, window.innerHeight - ctx.offsetHeight - 10) + 'px';
+  }
+  overlay.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (tool === 'select') { const hit = hitObject(coords(e)); selId = hit ? hit.id : null; refreshInspector(); render(); }
+    showCtx(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerdown', (e) => { if (!ctx.hidden && !ctx.contains(e.target)) hideCtx(); });
+
+  // ---- crop / transform (re-bake base) ----
   function drawCropOverlay() {
     if (!cropSel) return; const { x, y, w, h } = cropSel;
     octx.save(); octx.fillStyle = 'rgba(0,0,0,0.5)'; octx.fillRect(0, 0, overlay.width, overlay.height); octx.clearRect(x, y, w, h);
     octx.strokeStyle = '#6366f1'; octx.lineWidth = 2 / zoom; octx.strokeRect(x, y, w, h); octx.restore();
   }
-  function flattenToBase() { const c = document.createElement('canvas'); c.width = work.width; c.height = work.height; const ctx = c.getContext('2d'); ctx.drawImage(work, 0, 0); for (const o of objects) drawObject(ctx, o); return c; }
+  function flattenToBase() { const c = document.createElement('canvas'); c.width = work.width; c.height = work.height; const g = c.getContext('2d'); g.drawImage(work, 0, 0); for (const o of objects) drawObjectRaw(g, o); return c; }
   function applyCrop() {
     if (!cropSel || cropSel.w < 4 || cropSel.h < 4) { toast('Draw a crop area first'); return; }
     const flat = flattenToBase(); const { x, y, w, h } = cropSel;
     const nc = document.createElement('canvas'); nc.width = Math.round(w); nc.height = Math.round(h);
     nc.getContext('2d').drawImage(flat, x, y, w, h, 0, 0, nc.width, nc.height);
-    objects = []; selId = null; cropSel = null;
-    setBaseFromCanvas(nc); toast('Cropped');
+    objects = []; selId = null; cropSel = null; setBaseFromCanvas(nc); toast('Cropped');
   }
   function setBaseFromCanvas(c) { work.width = c.width; work.height = c.height; wctx.clearRect(0, 0, work.width, work.height); wctx.drawImage(c, 0, 0); syncSizes(); fitZoom(); render(); snapshot(); updateDims(); }
   function rotate(dir) { const flat = flattenToBase(); const nc = document.createElement('canvas'); nc.width = flat.height; nc.height = flat.width; const c = nc.getContext('2d'); c.translate(nc.width / 2, nc.height / 2); c.rotate((dir > 0 ? 90 : -90) * Math.PI / 180); c.drawImage(flat, -flat.width / 2, -flat.height / 2); objects = []; selId = null; setBaseFromCanvas(nc); }
   function flip(axis) { const flat = flattenToBase(); const nc = document.createElement('canvas'); nc.width = flat.width; nc.height = flat.height; const c = nc.getContext('2d'); if (axis === 'h') { c.translate(nc.width, 0); c.scale(-1, 1); } else { c.translate(0, nc.height); c.scale(1, -1); } c.drawImage(flat, 0, 0); objects = []; selId = null; setBaseFromCanvas(nc); }
-  function resizeTo(w, h) { if (!w || !h) return; const flat = flattenToBase(); const nc = document.createElement('canvas'); nc.width = Math.round(w); nc.height = Math.round(h); const c = nc.getContext('2d'); c.imageSmoothingQuality = 'high'; c.drawImage(flat, 0, 0, nc.width, nc.height); objects = []; selId = null; setBaseFromCanvas(nc); }
+  function resizeTo(w, h) { if (!w || !h) return; const flat = flattenToBase(); const nc = document.createElement('canvas'); nc.width = Math.round(w); nc.height = Math.round(h); const c = nc.getContext('2d'); c.imageSmoothingQuality = 'high'; c.drawImage(flat, 0, 0, nc.width, nc.height); objects = []; selId = null; setBaseFromCanvas(nc); toast('Resized to ' + Math.round(w) + '\u00d7' + Math.round(h)); }
 
-  // ---------- export ----------
+  // ---- export ----
   function scaledCanvas(bg) {
     const flat = flattenToBase();
     let s = exportScale === 'max' ? Math.max(1, Math.min(MAX_SIDE / flat.width, MAX_SIDE / flat.height)) : exportScale;
@@ -329,9 +377,9 @@
     const after = pdf.slice(before.length); for (let i = 0; i < after.length; i++) arr[before.length + imgBytes.length + i] = after.charCodeAt(i);
     return arr;
   }
-  function copyToClipboard() { flattenToBase().toBlob(async (blob) => { try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Copied to clipboard'); } catch (e) { toast('Copy failed - try Export'); } }, 'image/png'); }
+  function copyToClipboard() { flattenToBase().toBlob(async (blob) => { try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Image copied'); } catch (e) { toast('Copy failed - try Export'); } }, 'image/png'); }
 
-  // ---------- math for AI ----------
+  // ---- math for AI ----
   function buildBundle() {
     if (!equations.length) return '';
     const lines = ['You are given a screenshot plus the exact math it contains, transcribed as LaTeX directly from the page source (ground truth \u2014 trust it over the image).', 'Read every equation, solve each, show working step by step and give a clear final answer. For multiple choice, state the chosen option.', '', 'Equations, in reading order:'];
@@ -351,13 +399,13 @@
   function regionDataUrl() { const flat = flattenToBase(); if (cropSel && cropSel.w > 4 && cropSel.h > 4) { const nc = document.createElement('canvas'); nc.width = Math.round(cropSel.w); nc.height = Math.round(cropSel.h); nc.getContext('2d').drawImage(flat, cropSel.x, cropSel.y, cropSel.w, cropSel.h, 0, 0, nc.width, nc.height); return nc.toDataURL('image/png'); } return flat.toDataURL('image/png'); }
   async function runImageOcr() {
     if (host.hidden) { toast('Load an image first'); return; }
-    if (!window.FPOCR) { $('math-ocr-status').textContent = 'OCR engine not installed yet.'; return; }
+    if (!window.FPOCR) { $('math-ocr-status').textContent = 'OCR engine not available.'; return; }
     const st = $('math-ocr-status'); st.textContent = 'Loading model\u2026 first run downloads it once.';
     try {
       const res = await window.FPOCR.run(regionDataUrl(), (p) => { if (p.status === 'progress' && p.file) st.textContent = 'Downloading ' + p.file + ' ' + (p.progress ? Math.round(p.progress) + '%' : ''); else if (p.status) st.textContent = p.status + '\u2026'; });
       const latex = (res && res.latex) || ''; if (!latex) { st.textContent = 'No math detected.'; return; }
       st.textContent = 'Done.'; equations.push({ id: 'eq-ocr', type: 'display', latex, text: latex, confidence: 0.7 }); updateMathStatus(); renderEqList(); $('math-bundle').value = buildBundle();
-    } catch (err) { st.textContent = (err && err.code === 'MISSING_LIB') ? 'OCR library not installed yet.' : ('OCR failed: ' + ((err && err.message) || 'error')); }
+    } catch (err) { st.textContent = (err && err.code === 'CDN_BLOCKED') ? 'Could not load the OCR engine (offline?).' : ('OCR failed: ' + ((err && err.message) || 'error')); }
   }
 
   function openModal(id) { $(id).hidden = false; } function closeModal(id) { $(id).hidden = true; }
@@ -368,12 +416,11 @@
   async function handleFile(file) {
     if (!file) return;
     const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
-    if (isPdf) { if (!window.FPPDF) { toast('PDF engine not installed yet'); return; } toast('Rendering PDF\u2026'); try { const url = await window.FPPDF.fileToImage(file, 2); if (url) { equations = []; updateMathStatus(); await setBase(url); toast('PDF loaded'); } else toast('Empty PDF'); } catch (e) { toast(e && e.message === 'MISSING_LIB' ? 'PDF engine not installed yet' : 'Could not render PDF'); } return; }
+    if (isPdf) { if (!window.FPPDF) { toast('PDF engine not available'); return; } toast('Rendering PDF\u2026'); try { const url = await window.FPPDF.fileToImage(file, 2); if (url) { equations = []; updateMathStatus(); await setBase(url); toast('PDF loaded'); } else toast('Empty PDF'); } catch (e) { toast(e && e.code === 'CDN_BLOCKED' ? 'Could not load the PDF engine (offline?)' : 'Could not render PDF'); } return; }
     const fr = new FileReader(); fr.onload = () => { equations = []; updateMathStatus(); setBase(fr.result); }; fr.readAsDataURL(file);
   }
   async function pasteClip() { try { const items = await navigator.clipboard.read(); for (const it of items) { const t = it.types.find((x) => x.indexOf('image') === 0); if (t) { handleFile(await it.getType(t)); return; } } toast('No image in clipboard'); } catch (e) { toast('Paste blocked - use Ctrl+V'); } }
 
-  // ---------- bind ----------
   function bind() {
     document.querySelectorAll('.tool').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
     $('btn-undo').onclick = undo; $('btn-redo').onclick = redo;
@@ -386,7 +433,6 @@
     $('btn-crop-apply').onclick = applyCrop; $('btn-crop-cancel').onclick = () => { cropSel = null; setTool('select'); };
     document.querySelectorAll('#grp-crop .chip').forEach((c) => c.addEventListener('click', () => { document.querySelectorAll('#grp-crop .chip').forEach((x) => x.classList.remove('active')); c.classList.add('active'); const v = c.dataset.ar; cropAR = v === 'free' ? null : (v === 'a4' ? (210 / 297) : (() => { const [a, b] = v.split(':').map(Number); return a / b; })()); }));
     $('opt-width').addEventListener('input', () => ($('opt-width-val').textContent = $('opt-width').value));
-    // inspector edits
     $('insp-stroke').addEventListener('input', () => inspEdit((o) => { if (o.type === 'text') o.color = $('insp-stroke').value; else o.stroke = $('insp-stroke').value; }));
     $('insp-width').addEventListener('input', () => inspEdit((o) => { o.width = parseInt($('insp-width').value, 10); $('insp-width-val').textContent = o.width; }));
     $('insp-fill').addEventListener('input', () => inspEdit((o) => { o.fill = $('insp-fill').checked; }));
@@ -395,10 +441,7 @@
     $('insp-fontsize').addEventListener('input', () => inspEdit((o) => { o.size = parseInt($('insp-fontsize').value, 10) || 32; }));
     $('insp-bold').addEventListener('input', () => inspEdit((o) => { o.bold = $('insp-bold').checked; }));
     $('insp-textbg').addEventListener('input', () => inspEdit((o) => { o.bg = $('insp-textbg').checked; }));
-    $('insp-del').onclick = () => { const o = sel(); if (!o) return; objects = objects.filter((x) => x !== o); selId = null; refreshInspector(); render(); snapshot(); };
-    $('insp-dup').onclick = () => { const o = sel(); if (!o) return; const c = JSON.parse(JSON.stringify(o)); c.id = uid++; c.x += 16; c.y += 16; objects.push(c); selId = c.id; refreshInspector(); render(); snapshot(); };
-    $('insp-forward').onclick = () => { const o = sel(); if (!o) return; const i = objects.indexOf(o); if (i < objects.length - 1) { objects.splice(i, 1); objects.push(o); render(); snapshot(); } };
-    $('insp-back').onclick = () => { const o = sel(); if (!o) return; const i = objects.indexOf(o); if (i > 0) { objects.splice(i, 1); objects.unshift(o); render(); snapshot(); } };
+    $('insp-del').onclick = delObj; $('insp-dup').onclick = dupObj; $('insp-forward').onclick = bringFront; $('insp-back').onclick = sendBack;
     $('btn-fit').onclick = fitZoom; $('btn-100').onclick = () => applyZoom(1);
     $('zoom-range').addEventListener('input', () => applyZoom(parseInt($('zoom-range').value, 10) / 100, true));
     $('btn-open').onclick = () => $('file-input').click(); $('empty-open').onclick = () => $('file-input').click();
@@ -420,9 +463,14 @@
     document.addEventListener('paste', (e) => { const items = e.clipboardData && e.clipboardData.items; if (!items) return; for (const it of items) { if (it.type.indexOf('image') === 0) { handleFile(it.getAsFile()); break; } } });
     document.addEventListener('keydown', (e) => {
       if (editingText || /input|textarea|select/i.test(e.target.tagName)) { if (e.key === 'Escape' && editingText) commitText(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && sel()) { e.preventDefault(); const o = sel(); objects = objects.filter((x) => x !== o); selId = null; refreshInspector(); render(); snapshot(); return; }
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+      if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+      if (mod && e.key.toLowerCase() === 'c') { if (sel()) { e.preventDefault(); copyObj(); } return; }
+      if (mod && e.key.toLowerCase() === 'x') { if (sel()) { e.preventDefault(); cutObj(); } return; }
+      if (mod && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteObj(); return; }
+      if (mod && e.key.toLowerCase() === 'd') { if (sel()) { e.preventDefault(); dupObj(); } return; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && sel()) { e.preventDefault(); delObj(); return; }
       if (sel() && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); const o = sel(); const d = e.shiftKey ? 10 : 1; if (e.key === 'ArrowUp') o.y -= d; if (e.key === 'ArrowDown') o.y += d; if (e.key === 'ArrowLeft') o.x -= d; if (e.key === 'ArrowRight') o.x += d; render(); return; }
       const map = { v: 'select', c: 'crop', t: 'text', p: 'pen', a: 'arrow', l: 'line', r: 'rect', o: 'ellipse', h: 'highlight', b: 'blur', x: 'redact' };
       if (map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);

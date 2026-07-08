@@ -70,6 +70,12 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:
 .mini{padding:4px 10px;border:1px solid var(--border-subtle);border-radius:7px;background:var(--bg-card);color:var(--text-secondary);font:inherit;font-size:11px;cursor:pointer;}
 .mini:hover{color:var(--text-primary);}
 #zoom-range{width:120px;}
+.ctxmenu{position:fixed;z-index:300;background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:10px;padding:5px;min-width:180px;box-shadow:0 14px 36px rgba(0,0,0,.6);animation:pop .12s ease;}
+.ctxmenu button{display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;text-align:left;padding:8px 12px;border:none;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;border-radius:7px;cursor:pointer;}
+.ctxmenu button:hover:not(:disabled){background:var(--bg-card-hover);color:var(--text-primary);}
+.ctxmenu button:disabled{opacity:.35;cursor:default;}
+.ctxmenu kbd{color:var(--text-muted);font-size:11px;font-family:'Courier New',monospace;}
+.ctxmenu .sep{height:1px;background:var(--border-subtle);margin:4px 2px;}
 .modal{position:fixed;inset:0;background:rgba(4,4,14,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:100;animation:pop .18s ease;}
 @keyframes pop{from{opacity:0;}to{opacity:1;}}
 .modal-card{width:420px;max-width:92vw;background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:16px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.6);}
