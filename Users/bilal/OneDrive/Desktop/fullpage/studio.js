@@ -1,4 +1,4 @@
-/* FullPage Studio - editor engine (no external APIs). */
+/* FullPage Studio - editor engine (offline; optional local AI for image math). */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -23,9 +23,9 @@
   let exportScale = 2, exportFormat = 'png';
 
   const DRAW_TOOLS = ['pen', 'arrow', 'rect', 'ellipse', 'highlight', 'blur', 'redact'];
-  const MAX_SIDE = 7680; // 8K cap
+  const MAX_SIDE = 7680;
 
-  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2200); }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2600); }
   function opts() { return { stroke: $('opt-stroke').value, width: parseInt($('opt-width').value, 10) || 4, fill: $('opt-fill').checked, fillColor: $('opt-fillcolor').value }; }
   function coords(e) { const r = overlay.getBoundingClientRect(); const sx = work.width / r.width, sy = work.height / r.height; return { x: Math.max(0, Math.min(work.width, (e.clientX - r.left) * sx)), y: Math.max(0, Math.min(work.height, (e.clientY - r.top) * sy)) }; }
   function loadImage(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
@@ -208,41 +208,74 @@
   }
   function copyToClipboard() { work.toBlob(async (blob) => { try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Copied to clipboard'); } catch (e) { toast('Copy failed - try Export'); } }, 'image/png'); }
 
-  // ---- Math for AI (no API) ----
+  // ---- Math for AI ----
   function buildBundle() {
     if (!equations.length) return '';
     const lines = [
-      'You are given a screenshot plus the exact math it contains, transcribed as LaTeX directly from the page source (this is ground truth \u2014 trust it over anything you think you see in the image).',
-      'Task: read every equation carefully, then answer/solve each one. Show your working step by step and give a clear final answer. If a question is multiple choice, state the chosen option.',
+      'You are given a screenshot plus the exact math it contains, transcribed as LaTeX (ground truth \u2014 trust it over what you think you see in the image).',
+      'Task: read every equation carefully, then answer/solve each one. Show working step by step and give a clear final answer. For multiple choice, state the chosen option.',
       '',
       'Equations, in reading order:'
     ];
-    equations.forEach((e, i) => {
-      const body = e.latex || e.text || '(equation ' + (i + 1) + ', see image)';
-      lines.push((i + 1) + '. ' + (e.type === 'display' ? '[display] ' : '') + body);
-    });
+    equations.forEach((e, i) => { const body = e.latex || e.text || '(equation ' + (i + 1) + ', see image)'; lines.push((i + 1) + '. ' + (e.type === 'display' ? '[display] ' : '') + (e.source === 'ocr' ? '(read from image) ' : '') + body); });
     return lines.join('\n');
   }
-  function openMath() {
+  function renderMathList() {
     const list = $('math-list'); list.innerHTML = '';
+    equations.forEach((e, i) => { const row = document.createElement('div'); row.className = 'eq-row'; row.innerHTML = '<span class="eq-n">' + (i + 1) + '</span><code>' + escapeHtml(e.latex || e.text || '(see image)') + '</code>'; list.appendChild(row); });
+    $('math-bundle').value = buildBundle();
+  }
+  function openMath() {
+    $('math-ocr-status').textContent = '';
     if (!equations.length) {
-      $('math-intro').textContent = 'No machine-readable math was found in this page\u2019s source (the equations are likely baked into images). Best move: use Export at Max 8K so the picture is razor sharp, then send that image with the prompt below.';
+      $('math-intro').textContent = 'No machine-readable math found in the page source. Draw a crop box around the equations (optional), then hit \u201cRead image math (offline AI)\u201d below, or Export at Max 8K and send the image.';
       $('math-bundle').value = [
         'The attached image is a high-resolution screenshot containing math questions.',
         'Carefully read each equation directly from the image, transcribing symbols, exponents, fractions, subscripts and operators exactly.',
-        'Then solve every question, showing your working step by step, and give a clear final answer for each. For multiple-choice, state the chosen option.',
-        'If any symbol is genuinely ambiguous, note the most likely reading and proceed.'
+        'Then solve every question, showing working step by step, and give a clear final answer for each. For multiple choice, state the chosen option.'
       ].join('\n');
+      $('math-list').innerHTML = '';
     } else {
-      $('math-intro').textContent = equations.length + ' equation' + (equations.length === 1 ? '' : 's') + ' pulled straight from the page source \u2014 no API, no limits. Copy the bundle and paste it with your image.';
-      equations.forEach((e, i) => {
-        const row = document.createElement('div'); row.className = 'eq-row';
-        row.innerHTML = '<span class="eq-n">' + (i + 1) + '</span><code>' + escapeHtml(e.latex || e.text || '(see image)') + '</code>';
-        list.appendChild(row);
-      });
-      $('math-bundle').value = buildBundle();
+      $('math-intro').textContent = equations.length + ' equation' + (equations.length === 1 ? '' : 's') + ' from the page source. You can also add image-only math with the button below.';
+      renderMathList();
     }
     openModal('math-modal');
+  }
+  async function readImageMath() {
+    if (host.hidden) { toast('Load an image first'); return; }
+    const status = $('math-ocr-status');
+    if (!window.FPMathOCR) { status.textContent = 'OCR engine not loaded.'; return; }
+    const available = await window.FPMathOCR.isAvailable();
+    if (!available) {
+      status.innerHTML = 'Offline AI model not installed yet. Run <b>setup-models.cmd</b> (Windows) or <b>setup-models.sh</b> (Mac/Linux) in the extension folder once, then reload. Until then, use Export at Max 8K.';
+      return;
+    }
+    status.textContent = 'Loading model\u2026 (first run downloads once, then it\u2019s instant)';
+    try {
+      const src = regionOrWholeDataUrl();
+      const { latex } = await window.FPMathOCR.recognize(src, (p) => {
+        if (p && p.status === 'progress' && p.file) status.textContent = 'Loading model: ' + p.file + ' ' + (p.progress ? Math.round(p.progress) + '%' : '');
+        else if (p && p.status) status.textContent = 'Model: ' + p.status + '\u2026';
+      });
+      if (latex && latex.trim()) {
+        equations.push({ id: 'eq-' + (equations.length + 1), type: 'display', latex: latex.trim(), text: '', source: 'ocr', confidence: 0.8 });
+        updateMathStatus(); renderMathList();
+        status.textContent = 'Recognized \u2713  Added to the bundle below.';
+        toast('Math recognized from image');
+      } else { status.textContent = 'Could not read math from that region. Try a tighter crop.'; }
+    } catch (err) {
+      status.textContent = (err && err.code === 'NO_MODEL')
+        ? 'Model not installed. Run setup-models once, then reload.'
+        : 'Recognition failed: ' + ((err && err.message) || 'error') + '. Try a tighter crop.';
+    }
+  }
+  function regionOrWholeDataUrl() {
+    if (cropSel && cropSel.w > 4 && cropSel.h > 4) {
+      const nc = document.createElement('canvas'); nc.width = Math.round(cropSel.w); nc.height = Math.round(cropSel.h);
+      nc.getContext('2d').drawImage(work, cropSel.x, cropSel.y, cropSel.w, cropSel.h, 0, 0, nc.width, nc.height);
+      return nc.toDataURL('image/png');
+    }
+    return work.toDataURL('image/png');
   }
   function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
@@ -256,8 +289,29 @@
     exportScale = scale === 'max' ? 'max' : Number(scale); exportFormat = format; markScale();
     chrome.storage.local.set({ [SETTINGS_KEY]: { exportScale: scale, defaultFormat: format } }, () => { $('set-status').textContent = 'Saved.'; toast('Settings saved'); setTimeout(() => ($('set-status').textContent = ''), 1500); });
   }
-  function readFile(file) { const fr = new FileReader(); fr.onload = () => setFromSource(fr.result); fr.readAsDataURL(file); }
-  async function pasteFromClipboard() { try { const items = await navigator.clipboard.read(); for (const it of items) { const type = it.types.find((t) => t.indexOf('image') === 0); if (type) { readFile(await it.getType(type)); return; } } toast('No image in clipboard'); } catch (e) { toast('Paste blocked - use Ctrl+V'); } }
+
+  // ---- File / PDF input ----
+  async function handleFile(file) {
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    if (isPdf) {
+      if (!window.FPPdf || !(await window.FPPdf.isAvailable())) {
+        toast('PDF support needs setup: run setup-models once, then reload.');
+        return;
+      }
+      toast('Rendering PDF\u2026');
+      try {
+        const url = await window.FPPdf.renderToDataUrl(file, { scale: 2, onProgress: (p) => toast('Rendering PDF page ' + p.page + '/' + p.total) });
+        equations = [];
+        updateMathStatus();
+        await setFromSource(url);
+        toast('PDF loaded');
+      } catch (e) { toast('Could not render PDF: ' + ((e && e.message) || 'error')); }
+      return;
+    }
+    const fr = new FileReader(); fr.onload = () => { equations = []; updateMathStatus(); setFromSource(fr.result); }; fr.readAsDataURL(file);
+  }
+  async function pasteFromClipboard() { try { const items = await navigator.clipboard.read(); for (const it of items) { const type = it.types.find((t) => t.indexOf('image') === 0); if (type) { handleFile(await it.getType(type)); return; } } toast('No image in clipboard'); } catch (e) { toast('Paste blocked - use Ctrl+V'); } }
 
   function bind() {
     document.querySelectorAll('.tool').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
@@ -276,9 +330,10 @@
     $('btn-fit').onclick = fitZoom; $('btn-100').onclick = () => applyZoom(1);
     $('zoom-range').addEventListener('input', () => applyZoom(parseInt($('zoom-range').value, 10) / 100, true));
     $('btn-open').onclick = () => $('file-input').click(); $('empty-open').onclick = () => $('file-input').click();
-    $('file-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) readFile(f); });
+    $('file-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) handleFile(f); e.target.value = ''; });
     $('btn-paste').onclick = pasteFromClipboard; $('empty-paste').onclick = pasteFromClipboard;
     $('btn-math').onclick = openMath;
+    $('math-read-image').onclick = readImageMath;
     $('math-copy-bundle').onclick = () => copyText($('math-bundle').value, 'Copied for AI');
     $('math-copy-latex').onclick = () => copyText(equations.map((e, i) => (i + 1) + '. ' + (e.latex || e.text || '')).join('\n'), 'LaTeX copied');
     $('btn-export').onclick = (e) => { e.stopPropagation(); $('export-menu').hidden = !$('export-menu').hidden; };
@@ -290,8 +345,8 @@
     document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => closeModal(b.dataset.close)));
     ['dragover', 'dragenter'].forEach((ev) => stageWrap.addEventListener(ev, (e) => { e.preventDefault(); emptyEl.classList.add('dragover'); }));
     ['dragleave', 'drop'].forEach((ev) => stageWrap.addEventListener(ev, (e) => { e.preventDefault(); emptyEl.classList.remove('dragover'); }));
-    stageWrap.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
-    document.addEventListener('paste', (e) => { const items = e.clipboardData && e.clipboardData.items; if (!items) return; for (const it of items) { if (it.type.indexOf('image') === 0) { readFile(it.getAsFile()); break; } } });
+    stageWrap.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+    document.addEventListener('paste', (e) => { const items = e.clipboardData && e.clipboardData.items; if (!items) return; for (const it of items) { if (it.type.indexOf('image') === 0) { handleFile(it.getAsFile()); break; } } });
     document.addEventListener('keydown', (e) => {
       if (activeText || /input|textarea|select/i.test(e.target.tagName)) { if (e.key === 'Escape' && activeText) cancelText(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
