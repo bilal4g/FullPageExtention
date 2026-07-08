@@ -39,7 +39,6 @@
   }
   async function applySnapshot(url) { const img = await loadImage(url); work.width = img.width; work.height = img.height; wctx.clearRect(0, 0, work.width, work.height); wctx.drawImage(img, 0, 0); syncSizes(); redraw(); updateDims(); }
 
-  // ---- Boot: load the capture from storage and stitch full-page frames ----
   async function stitchFrames(cap) {
     const dpr = (cap.page && cap.page.devicePixelRatio) || 1;
     const imgs = [];
@@ -83,7 +82,7 @@
   function fitZoom() { const pad = 64; const z = Math.min((stageWrap.clientWidth - pad) / work.width, (stageWrap.clientHeight - pad) / work.height, 1); applyZoom(z > 0 ? z : 1); }
   function redraw() { sctx.clearRect(0, 0, stage.width, stage.height); sctx.drawImage(work, 0, 0); }
   function clearOverlay() { octx.clearRect(0, 0, overlay.width, overlay.height); }
-  function updateDims() { $('status-dims').textContent = work.width + ' × ' + work.height + ' px'; }
+  function updateDims() { $('status-dims').textContent = work.width + ' \u00d7 ' + work.height + ' px'; }
   function updateMathStatus() { const n = equations.length; $('status-math').textContent = n ? (n + ' equation' + (n === 1 ? '' : 's') + ' detected') : ''; }
 
   function pushHistory() { try { history.push(work.toDataURL('image/png')); } catch (e) {} if (history.length > 30) history.shift(); redoStack = []; }
@@ -170,7 +169,6 @@
     clearOverlay(); redraw(); pushHistory(); drag = null;
   });
 
-  // ---- Export (with scale up to 8K) ----
   function scaledCanvas(bg) {
     let s = exportScale === 'max' ? Math.max(1, Math.min(MAX_SIDE / work.width, MAX_SIDE / work.height)) : exportScale;
     if (exportScale !== 'max') { const longest = Math.max(work.width, work.height) * s; if (longest > MAX_SIDE) s = MAX_SIDE / Math.max(work.width, work.height); }
@@ -213,7 +211,12 @@
   // ---- Math for AI (no API) ----
   function buildBundle() {
     if (!equations.length) return '';
-    const lines = ['The attached image is a screenshot. Its math equations, read directly from the page source, are listed below in reading order (LaTeX). Use these as the ground truth for any equation in the image.', ''];
+    const lines = [
+      'You are given a screenshot plus the exact math it contains, transcribed as LaTeX directly from the page source (this is ground truth \u2014 trust it over anything you think you see in the image).',
+      'Task: read every equation carefully, then answer/solve each one. Show your working step by step and give a clear final answer. If a question is multiple choice, state the chosen option.',
+      '',
+      'Equations, in reading order:'
+    ];
     equations.forEach((e, i) => {
       const body = e.latex || e.text || '(equation ' + (i + 1) + ', see image)';
       lines.push((i + 1) + '. ' + (e.type === 'display' ? '[display] ' : '') + body);
@@ -223,10 +226,15 @@
   function openMath() {
     const list = $('math-list'); list.innerHTML = '';
     if (!equations.length) {
-      $('math-intro').textContent = 'No machine-readable math was found in this page\u2019s source (the equations may be baked into images). Best fallback: use Export at Max 8K so the AI can read the pixels, then send that image.';
-      $('math-bundle').value = 'The attached image is a high-resolution screenshot. Please read the math equations directly from the image.';
+      $('math-intro').textContent = 'No machine-readable math was found in this page\u2019s source (the equations are likely baked into images). Best move: use Export at Max 8K so the picture is razor sharp, then send that image with the prompt below.';
+      $('math-bundle').value = [
+        'The attached image is a high-resolution screenshot containing math questions.',
+        'Carefully read each equation directly from the image, transcribing symbols, exponents, fractions, subscripts and operators exactly.',
+        'Then solve every question, showing your working step by step, and give a clear final answer for each. For multiple-choice, state the chosen option.',
+        'If any symbol is genuinely ambiguous, note the most likely reading and proceed.'
+      ].join('\n');
     } else {
-      $('math-intro').textContent = equations.length + ' equation' + (equations.length === 1 ? '' : 's') + ' pulled straight from the page source. No API, no limits. Copy the bundle and paste it with your image.';
+      $('math-intro').textContent = equations.length + ' equation' + (equations.length === 1 ? '' : 's') + ' pulled straight from the page source \u2014 no API, no limits. Copy the bundle and paste it with your image.';
       equations.forEach((e, i) => {
         const row = document.createElement('div'); row.className = 'eq-row';
         row.innerHTML = '<span class="eq-n">' + (i + 1) + '</span><code>' + escapeHtml(e.latex || e.text || '(see image)') + '</code>';
