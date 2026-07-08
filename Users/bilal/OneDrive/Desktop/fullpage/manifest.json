@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FullPage Studio",
-  "version": "1.4.0",
-  "description": "Full-page screenshot capture with a pro editing Studio and API-free, AI-readable math extraction.",
+  "version": "1.5.0",
+  "description": "Full-page screenshot capture with a pro editing Studio, offline math analysis, and PDF support.",
   "permissions": ["activeTab", "scripting", "tabs", "storage", "unlimitedStorage", "clipboardWrite"],
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -13,14 +13,15 @@
   "options_page": "options.html",
   "background": { "service_worker": "background.js" },
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle" }],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "web_accessible_resources": [{
+    "resources": ["studio.html", "studio.js", "studio.css", "ocr-model.js", "pdf-render.js", "vendor/*"],
+    "matches": ["<all_urls>"]
+  }],
   "commands": {
-    "capture-visible": {
-      "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
-      "description": "Capture the visible area"
-    },
-    "capture-full-page": {
-      "suggested_key": { "default": "Ctrl+Shift+F", "mac": "Command+Shift+F" },
-      "description": "Capture the full page"
-    }
+    "capture-visible": { "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" }, "description": "Capture the visible area" },
+    "capture-full-page": { "suggested_key": { "default": "Ctrl+Shift+F", "mac": "Command+Shift+F" }, "description": "Capture the full page" }
   }
 }
