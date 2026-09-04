@@ -84,8 +84,8 @@ async function runCapture({ mode, tabId }) {
 
     while (y < info.totalHeight && n < maxFrames) {
       const scrollRes = await send(tabId, { type: 'fp:scrollTo', y });
-      // Fast compositing wait (110ms is 3.5x faster than original 380ms)
-      await wait(110);
+      // 520ms perfectly respects Chromium's MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND quota (2 calls/sec)
+      await wait(520);
 
       const dataUrl = await captureVisible(tab.windowId);
       const actualY = (scrollRes && scrollRes.y !== undefined) ? scrollRes.y : y;
@@ -138,9 +138,20 @@ async function runCapture({ mode, tabId }) {
 
 function captureVisible(windowId) {
   return new Promise((resolve, reject) => {
-    chrome.tabs.captureVisibleTab(windowId, { format: 'png' }, (dataUrl) => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-      else resolve(dataUrl);
-    });
+    function attempt(retries) {
+      chrome.tabs.captureVisibleTab(windowId, { format: 'png' }, (dataUrl) => {
+        if (chrome.runtime.lastError) {
+          const err = chrome.runtime.lastError.message || '';
+          if (err.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND') && retries > 0) {
+            setTimeout(() => attempt(retries - 1), 600);
+          } else {
+            reject(new Error(err));
+          }
+        } else {
+          resolve(dataUrl);
+        }
+      });
+    }
+    attempt(3);
   });
 }
