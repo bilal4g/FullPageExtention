@@ -120,6 +120,22 @@ if (!existsSync(zipPath) || statSync(zipPath).size === 0) fail('ZIP package was 
 log(`Created package: ${relative(ROOT, zipPath)} (${statSync(zipPath).size} bytes)`);
 
 // ---- 6. publish -------------------------------------------------------
+// Load environment variables from .env if present
+const envPath = join(ROOT, '.env');
+if (existsSync(envPath)) {
+  const envContent = readFileSync(envPath, 'utf8');
+  envContent.split(/\r?\n/).forEach((line) => {
+    const match = line.match(/^\s*([^#=]+)\s*=\s*(.*)\s*$/);
+    if (match) {
+      const key = match[1].trim();
+      let val = match[2].trim();
+      if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+      else if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
+      process.env[key] = val;
+    }
+  });
+}
+
 const clientId = process.env.EDGE_CLIENT_ID;
 const apiKey = process.env.EDGE_API_KEY;
 const productId = process.env.EDGE_PRODUCT_ID;

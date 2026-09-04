@@ -56,35 +56,11 @@
     return out.toDataURL('image/png');
   }
 
-  function loadOcr(model, id) {
-    if (ocrP) return ocrP;
-    ocrP = (async () => {
-      let tf;
-      try { tf = await import(TRANSFORMERS); }
-      catch (e) { throw Object.assign(new Error('Could not load OCR engine from CDN (offline?)'), { code: 'CDN_BLOCKED' }); }
-      if (tf.env) { tf.env.allowRemoteModels = true; tf.env.useBrowserCache = true; }
-      return tf.pipeline('image-to-text', model || DEFAULT_MODEL, {
-        quantized: true,
-        progress_callback: (p) => progress(id, p)
-      });
-    })();
-    return ocrP;
-  }
-  async function ocr(dataUrl, model, id) {
-    const pipe = await loadOcr(model, id);
-    const out = await pipe(dataUrl, { max_new_tokens: 512 });
-    let t = '';
-    if (Array.isArray(out) && out.length) t = out[0].generated_text || out[0].text || '';
-    else if (out && typeof out === 'object') t = out.generated_text || out.text || '';
-    return (t || '').trim();
-  }
-
   window.addEventListener('message', async (e) => {
     const d = e.data || {};
     if (d.__fp !== 'req') return;
     try {
       if (d.type === 'pdf') { const url = await renderPdf(d.buffer, d.scale, d.id); post({ __fp: 'res', id: d.id, ok: true, dataUrl: url }); }
-      else if (d.type === 'ocr') { const latex = await ocr(d.dataUrl, d.model, d.id); post({ __fp: 'res', id: d.id, ok: true, latex }); }
     } catch (err) {
       post({ __fp: 'res', id: d.id, ok: false, error: (err && err.message) || 'error', code: err && err.code });
     }

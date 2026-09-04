@@ -147,7 +147,7 @@
       <div class="modal-head"><h2>✨ Math for AI</h2><button class="x" data-close="math-modal">✕</button></div>
       <p class="hint" id="math-intro"></p>
       <div class="row">
-        <button id="math-ocr-run" class="btn primary">🧠 Read image with offline AI</button>
+        <button id="math-ocr-run" class="btn primary">🧠 Read image with Gemini Cloud AI</button>
         <span id="math-ocr-status" class="set-status"></span>
       </div>
       <div id="math-list" class="math-list"></div>
@@ -155,7 +155,6 @@
       <textarea id="math-bundle" rows="7" readonly></textarea>
       <div class="row">
         <button id="math-copy-bundle" class="btn primary">Copy for AI</button>
-        <button id="math-copy-latex" class="btn">Copy LaTeX only</button>
         <button class="btn" data-close="math-modal">Close</button>
       </div>
     </div>
@@ -164,14 +163,26 @@
   <div id="settings-modal" class="modal" hidden>
     <div class="modal-card">
       <div class="modal-head"><h2>Settings</h2><button class="x" data-close="settings-modal">✕</button></div>
-      <p class="hint">Studio preferences. No API keys, no accounts. Everything runs locally in your browser.</p>
+      <p class="hint">Studio preferences. Configure Cloud Gemini API (recommended, free tier) or local offline OCR, and capture slicing preferences.</p>
+      
       <label class="lbl">Default export scale</label>
-      <select id="set-scale"><option value="1">1x</option><option value="2" selected>2x</option><option value="4">4x</option><option value="max">Max 8K</option></select>
+      <select id="set-scale"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option><option value="max" selected>Max 8K</option></select>
+      
       <label class="lbl">Default format</label>
       <select id="set-format"><option value="png">PNG</option><option value="jpg">JPG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select>
-      <label class="lbl">Offline OCR model (advanced)</label>
-      <input type="text" id="set-ocr" placeholder="Xenova/nougat-small" autocomplete="off" />
-      <div class="row"><button id="set-save" class="btn primary">Save</button><button class="btn" data-close="settings-modal">Close</button></div>
+      
+      <label class="lbl">Gemini API Key</label>
+      <input type="password" id="set-gemini-key" placeholder="AIzaSy..." autocomplete="off" />
+
+      <label class="lbl">Slice height (px)</label>
+      <input type="number" id="set-slice-height" min="500" max="5000" placeholder="1500" />
+
+      <label class="field checkbox" style="margin-top:12px; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="set-slice-enabled" style="width:16px; height:16px; cursor:pointer;" />
+        <span>Slice tall captures on export (PDF/Images)</span>
+      </label>
+
+      <div class="row" style="margin-top:16px;"><button id="set-save" class="btn primary">Save</button><button class="btn" data-close="settings-modal">Close</button></div>
       <div id="set-status" class="set-status"></div>
     </div>
   </div>

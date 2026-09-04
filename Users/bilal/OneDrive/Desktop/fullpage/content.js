@@ -9,13 +9,45 @@
   window.__fpStudioInjected = true;
 
   let restorers = [];
-
   let activeScrollContainer = null;
 
   function getScrollContainer() {
     const de = document.documentElement;
     const bodyHeight = document.body ? document.body.scrollHeight : 0;
-    const docHeight = Math.max(de.scrollHeight, bodyHeight);
+    let docHeight = Math.max(de.scrollHeight, bodyHeight, de.offsetHeight, document.body ? document.body.offsetHeight : 0);
+
+    // Look for any element on the page that has content taller than docHeight (e.g. Canvas LMS, SPAs, feeds)
+    const all = document.querySelectorAll('*');
+    let maxContentH = docHeight;
+    let maxContentEl = null;
+
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      if (el === de || el === document.body) continue;
+      if (el.clientWidth < window.innerWidth * 0.25 || el.clientHeight < 100) continue;
+      if (el.scrollHeight > maxContentH + 50) {
+        maxContentH = el.scrollHeight;
+        maxContentEl = el;
+      }
+    }
+
+    if (maxContentEl && maxContentH > docHeight + 50) {
+      let cur = maxContentEl;
+      let scroller = null;
+      while (cur && cur !== document.body && cur !== de) {
+        try {
+          const cs = window.getComputedStyle(cur);
+          const oy = cs.overflowY, o = cs.overflow;
+          if (oy === 'auto' || oy === 'scroll' || oy === 'overlay' || o === 'auto' || o === 'scroll' || cur.scrollHeight > cur.clientHeight + 50) {
+            scroller = cur;
+            break;
+          }
+        } catch (e) {}
+        cur = cur.parentElement;
+      }
+      return { el: scroller || maxContentEl, height: maxContentH, isWindow: false };
+    }
+
     return { el: window, height: docHeight, isWindow: true };
   }
 
@@ -24,19 +56,31 @@
     switch (msg.type) {
       case 'fp:ping': sendResponse({ ok: true }); break;
       case 'fp:getScrollInfo': sendResponse(getScrollInfo()); break;
-      case 'fp:prepare': prepare(); sendResponse({ ok: true }); break;
-      case 'fp:scrollTo': {
-        const y = msg.y || 0;
-        if (activeScrollContainer === window || !activeScrollContainer) {
-          window.scrollTo(0, y);
-          sendResponse({ y: window.scrollY });
-        } else {
-          activeScrollContainer.scrollTop = y;
-          sendResponse({ y: activeScrollContainer.scrollTop });
-        }
+      case 'fp:getScrollY': {
+        const y = window.scrollY || (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || (activeScrollContainer && activeScrollContainer !== window ? activeScrollContainer.scrollTop : 0) || 0;
+        sendResponse(y);
         break;
       }
-      case 'fp:restore': restore(); sendResponse({ ok: true }); break;
+      case 'fp:prepare': prepare(); sendResponse({ ok: true }); break;
+      case 'fp:hideFixed': hideFixed(); sendResponse({ ok: true }); break;
+      case 'fp:scrollTo': {
+        const y = msg.y || 0;
+        window.scrollTo(0, y);
+        if (document.scrollingElement) document.scrollingElement.scrollTop = y;
+        if (document.documentElement) document.documentElement.scrollTop = y;
+        if (document.body) document.body.scrollTop = y;
+        if (activeScrollContainer && activeScrollContainer !== window) {
+          activeScrollContainer.scrollTop = y;
+        }
+        const actual = Math.max(
+          window.scrollY || 0,
+          document.scrollingElement ? document.scrollingElement.scrollTop : 0,
+          activeScrollContainer && activeScrollContainer !== window ? activeScrollContainer.scrollTop : 0
+        );
+        sendResponse({ y: actual });
+        break;
+      }
+      case 'fp:restore': restore(msg.origY); sendResponse({ ok: true }); break;
       case 'fp:metadata': sendResponse(collectMetadata(msg.mode || 'visible')); break;
       default: break;
     }
@@ -57,20 +101,40 @@
 
   function prepare() {
     restorers = [];
-    const all = document.querySelectorAll('*');
-    for (const el of all) {
-      let cs; try { cs = getComputedStyle(el); } catch (e) { continue; }
-      if (cs.position === 'fixed') { restorers.push({ el, prop: 'visibility', val: el.style.visibility }); el.style.visibility = 'hidden'; }
-      else if (cs.position === 'sticky') { restorers.push({ el, prop: 'position', val: el.style.position }); el.style.position = 'static'; }
+    const vh = window.innerHeight;
+    const candidates = document.querySelectorAll('header, [class*="header"], [class*="banner"], [class*="bar"], [style*="fixed"]');
+    for (let i = 0; i < candidates.length; i++) {
+      const el = candidates[i];
+      if (el === document.documentElement || el === document.body) continue;
+      try {
+        const cs = window.getComputedStyle(el);
+        if (cs.position === 'fixed') {
+          const r = el.getBoundingClientRect();
+          if (r.height > 0 && r.height <= 140 && (r.top <= 10 || r.bottom >= vh - 10)) {
+            if (!el.querySelector('main, article, form, [class*="content"], [class*="question"]')) {
+              restorers.push({ el, prop: 'visibility', val: el.style.visibility });
+            }
+          }
+        }
+      } catch (e) {}
     }
   }
-  function restore() {
-    for (const r of restorers) { try { r.el.style[r.prop] = r.val; } catch (e) {} }
+
+  function hideFixed() {
+    for (const r of restorers) {
+      try { r.el.style[r.prop] = 'hidden'; } catch (e) {}
+    }
+  }
+
+  function restore(origY) {
+    for (const r of restorers) {
+      try { r.el.style[r.prop] = r.val; } catch (e) {}
+    }
     restorers = [];
+    window.scrollTo(0, origY || 0);
+    if (document.scrollingElement) document.scrollingElement.scrollTop = origY || 0;
     if (activeScrollContainer && activeScrollContainer !== window) {
-      activeScrollContainer.scrollTop = 0;
-    } else {
-      window.scrollTo(0, 0);
+      activeScrollContainer.scrollTop = origY || 0;
     }
   }
 

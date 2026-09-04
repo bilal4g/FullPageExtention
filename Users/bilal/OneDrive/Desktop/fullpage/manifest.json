@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FullPage Studio",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "description": "Full-page screenshot capture with a pro editing Studio, API-free AI-readable math, offline math OCR, and PDF support.",
   "permissions": [
     "activeTab",
