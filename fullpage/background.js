@@ -99,6 +99,67 @@ async function runCapture({ mode, tabId }) {
     } catch (e) {}
   };
 
+  // STEP 1: Expand same-origin iframes to their full content height
+  // This is critical for Canvas LMS where quiz content lives inside a 780px iframe
+  let iframesExpanded = false;
+  if (mode === 'full') {
+    try {
+      const expandResult = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const saved = [];
+          const iframes = document.querySelectorAll('iframe');
+          for (const iframe of iframes) {
+            try {
+              const doc = iframe.contentDocument;
+              if (!doc) continue; // cross-origin, skip
+              const contentH = Math.max(
+                doc.documentElement ? doc.documentElement.scrollHeight : 0,
+                doc.body ? doc.body.scrollHeight : 0
+              );
+              if (contentH > iframe.clientHeight + 50) {
+                saved.push({
+                  id: iframe.id || '',
+                  src: iframe.src || '',
+                  origHeight: iframe.style.height,
+                  origMaxHeight: iframe.style.maxHeight,
+                  origOverflow: iframe.style.overflow
+                });
+                iframe.style.height = contentH + 'px';
+                iframe.style.maxHeight = 'none';
+                iframe.style.overflow = 'visible';
+                // Also expand parent containers that might clip
+                let parent = iframe.parentElement;
+                for (let i = 0; i < 5 && parent; i++) {
+                  const cs = window.getComputedStyle(parent);
+                  if (cs.overflow === 'hidden' || cs.overflowY === 'hidden') {
+                    if (!parent.__fpOrigOverflow) {
+                      parent.__fpOrigOverflow = parent.style.overflow;
+                      parent.style.overflow = 'visible';
+                    }
+                  }
+                  if (cs.maxHeight !== 'none') {
+                    if (!parent.__fpOrigMaxH) {
+                      parent.__fpOrigMaxH = parent.style.maxHeight;
+                      parent.style.maxHeight = 'none';
+                    }
+                  }
+                  parent = parent.parentElement;
+                }
+              }
+            } catch (e) {} // cross-origin iframe, skip
+          }
+          window.__fpSavedIframes = saved;
+          return saved.length;
+        }
+      });
+      if (expandResult && expandResult[0] && expandResult[0].result > 0) {
+        iframesExpanded = true;
+        await wait(200); // Let layout recalculate
+      }
+    } catch (e) {}
+  }
+
   const metadata = (await send(tabId, { type: 'fp:metadata', mode })) || null;
   let info = (await send(tabId, { type: 'fp:getScrollInfo' })) || null;
 
@@ -205,6 +266,42 @@ async function runCapture({ mode, tabId }) {
     tab: { id: tab.id, title: tab.title, url: tab.url },
     metadata
   };
+
+  // Restore expanded iframes to their original sizes
+  if (iframesExpanded) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const saved = window.__fpSavedIframes || [];
+          const iframes = document.querySelectorAll('iframe');
+          for (const iframe of iframes) {
+            const match = saved.find(s => (s.id && s.id === iframe.id) || (s.src && s.src === iframe.src));
+            if (match) {
+              iframe.style.height = match.origHeight || '';
+              iframe.style.maxHeight = match.origMaxHeight || '';
+              iframe.style.overflow = match.origOverflow || '';
+            }
+            // Restore parent containers
+            let parent = iframe.parentElement;
+            for (let i = 0; i < 5 && parent; i++) {
+              if (parent.__fpOrigOverflow !== undefined) {
+                parent.style.overflow = parent.__fpOrigOverflow;
+                delete parent.__fpOrigOverflow;
+              }
+              if (parent.__fpOrigMaxH !== undefined) {
+                parent.style.maxHeight = parent.__fpOrigMaxH;
+                delete parent.__fpOrigMaxH;
+              }
+              parent = parent.parentElement;
+            }
+          }
+          delete window.__fpSavedIframes;
+        }
+      });
+    } catch (e) {}
+  }
+
   await chrome.storage.local.set({ [CAP_KEY]: capture });
   return capture;
 }
