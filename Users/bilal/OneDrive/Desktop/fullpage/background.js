@@ -155,61 +155,42 @@ const prepareCaptureJS = `(function() {
   window.__ss_prepared = true;
   window.__ss_restorers = [];
   
-  var body = document.body;
+  var vh = window.innerHeight;
+  var vw = window.innerWidth;
   
-  // Fast candidate selector for headers, navs, sticky bars, overlays
-  var candidates = document.querySelectorAll('header, nav, aside, footer, [class*="header"], [class*="nav"], [class*="sticky"], [class*="fixed"], [class*="banner"], [class*="bar"], [style*="fixed"], [style*="sticky"]');
+  // Only target slim fixed headers/banners (height <= 140px, top <= 10 or bottom >= vh - 10)
+  // NEVER sidebars, NEVER main content wrappers, NEVER sticky elements (to avoid breaking layout)
+  var candidates = document.querySelectorAll('header, [class*="header"], [class*="banner"], [class*="bar"], [style*="fixed"]');
   var seen = new Set();
-  function checkEl(el) {
-    if (!el || seen.has(el) || el === document.documentElement || el === document.body) return;
+  
+  for (var i = 0; i < candidates.length; i++) {
+    var el = candidates[i];
+    if (!el || seen.has(el) || el === document.documentElement || el === document.body) continue;
     seen.add(el);
     try {
       var style = window.getComputedStyle(el);
-      var pos = style.position;
-      
-      if (pos === 'fixed') {
-        window.__ss_restorers.push({
-          el: el,
-          type: 'fixed',
-          origVisibility: el.style.visibility
-        });
-      }
-      
-      if (pos === 'sticky') {
-        window.__ss_restorers.push({
-          el: el,
-          type: 'sticky',
-          origPosition: el.style.position
-        });
-        el.style.position = 'static';
-      }
-      
-      if (style.backgroundAttachment === 'fixed') {
-        window.__ss_restorers.push({
-          el: el,
-          type: 'background',
-          origAttachment: el.style.backgroundAttachment
-        });
-        el.style.backgroundAttachment = 'scroll';
+      if (style.position === 'fixed') {
+        var r = el.getBoundingClientRect();
+        if (r.height > 0 && r.height <= 140 && (r.top <= 10 || r.bottom >= vh - 10)) {
+          // Verify it does not contain main exam/page content
+          if (!el.querySelector('main, article, form, [class*="content"], [class*="question"]')) {
+            window.__ss_restorers.push({
+              el: el,
+              origVisibility: el.style.visibility
+            });
+          }
+        }
       }
     } catch(e) {}
   }
-
-  if (body) {
-    for (var j = 0; j < body.children.length; j++) checkEl(body.children[j]);
-  }
-  for (var i = 0; i < candidates.length; i++) checkEl(candidates[i]);
 })()`;
 
 const hideFixedJS = `(function() {
   if (!window.__ss_restorers) return;
   for (var i = 0; i < window.__ss_restorers.length; i++) {
-    var item = window.__ss_restorers[i];
-    if (item.type === 'fixed') {
-      try {
-        item.el.style.visibility = 'hidden';
-      } catch(e) {}
-    }
+    try {
+      window.__ss_restorers[i].el.style.visibility = 'hidden';
+    } catch(e) {}
   }
 })()`;
 
@@ -218,15 +199,8 @@ const restoreAllJS = `(function() {
   window.__ss_prepared = false;
   if (window.__ss_restorers) {
     for (var i = 0; i < window.__ss_restorers.length; i++) {
-      var item = window.__ss_restorers[i];
       try {
-        if (item.type === 'sticky') {
-          item.el.style.position = item.origPosition;
-        } else if (item.type === 'fixed') {
-          item.el.style.visibility = item.origVisibility;
-        } else if (item.type === 'background') {
-          item.el.style.backgroundAttachment = item.origAttachment;
-        }
+        window.__ss_restorers[i].el.style.visibility = window.__ss_restorers[i].origVisibility;
       } catch(e) {}
     }
     window.__ss_restorers = [];
@@ -236,55 +210,40 @@ const restoreAllJS = `(function() {
 const findScrollableJS = `(function(){
   var vw = window.innerWidth, vh = window.innerHeight;
 
-  function canElScroll(el) {
-    if (!el) return false;
-    var old = el.scrollTop;
-    el.scrollTop = old + 10;
-    var moved = el.scrollTop !== old;
-    el.scrollTop = old;
-    if (!moved) {
-      el.scrollTop = old - 10;
-      moved = el.scrollTop !== old;
-      el.scrollTop = old;
-    }
-    return moved;
-  }
+  var docH = Math.max(
+    document.documentElement.scrollHeight,
+    document.body ? document.body.scrollHeight : 0,
+    document.documentElement.offsetHeight,
+    document.body ? document.body.offsetHeight : 0
+  );
 
-  function canDocScroll() {
-    var orig = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
-    if (orig > 0) return true;
-    window.scrollBy(0, 10);
-    var newY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
-    if (newY !== orig) {
-      window.scrollTo(0, orig);
-      return true;
-    }
-    window.scrollBy(0, -10);
-    newY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
-    if (newY !== orig) {
-      window.scrollTo(0, orig);
-      return true;
-    }
-    return false;
-  }
+  var origDocY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+  window.scrollTo(0, origDocY + 20);
+  var docY2 = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+  var docCanScroll = docY2 !== origDocY;
+  window.scrollTo(0, origDocY);
 
-  // 1. Search for inner scrollable containers (e.g. Canvas LMS, SPAs, feeds)
-  var allEls = document.querySelectorAll('*');
+  // Search for any inner container (Canvas LMS, SPAs, feeds, chat logs)
+  var all = document.querySelectorAll('*');
   var bestEl = null;
-  var maxDiff = 40; // minimum overflow to consider scrollable
+  var maxDiff = 60;
 
-  for (var i = 0; i < allEls.length; i++) {
-    var el = allEls[i];
+  for (var i = 0; i < all.length; i++) {
+    var el = all[i];
     if (el === document.documentElement || el === document.body) continue;
-    if (el.clientHeight < 120 || el.clientWidth < 180) continue;
+    if (el.clientHeight < 150 || el.clientWidth < 200) continue;
     if (el.scrollHeight <= el.clientHeight + maxDiff) continue;
 
     try {
-      var cs = getComputedStyle(el);
+      var cs = window.getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') continue;
       var oy = cs.overflowY, o = cs.overflow;
       if (oy === 'auto' || oy === 'scroll' || oy === 'overlay' || o === 'auto' || o === 'scroll' || o === 'overlay') {
-        if (canElScroll(el)) {
+        var oldTop = el.scrollTop;
+        el.scrollTop = oldTop + 20;
+        var moved = el.scrollTop !== oldTop;
+        el.scrollTop = oldTop;
+        if (moved) {
           var diff = el.scrollHeight - el.clientHeight;
           if (diff > maxDiff) {
             bestEl = el;
@@ -295,37 +254,29 @@ const findScrollableJS = `(function(){
     } catch(e){}
   }
 
-  var docH = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
-  var docCanScroll = canDocScroll();
-  var origDocY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
-
-  // If an inner element can scroll and has more scrollable content than window (or window cannot scroll):
-  if (bestEl && (!docCanScroll || maxDiff > (docH - vh))) {
+  var docOverflow = Math.max(0, docH - vh);
+  if (bestEl && (!docCanScroll || maxDiff > docOverflow)) {
     window.__ss_el = bestEl;
     window.__ss_origScroll = bestEl.scrollTop;
-    var r = bestEl.getBoundingClientRect();
     return JSON.stringify({
-      found: true, docScroll: false, frame: 'main',
-      tag: bestEl.tagName, id: bestEl.id || '', cls: (bestEl.className || '').toString().slice(0, 60),
-      rect: { top: r.top, left: r.left, width: r.width, height: r.height },
-      scrollHeight: bestEl.scrollHeight, clientHeight: bestEl.clientHeight,
+      found: true,
+      hasInner: true,
+      docScroll: docCanScroll,
+      scrollHeight: Math.max(docH, bestEl.scrollHeight),
+      clientHeight: vh,
       vw: vw, vh: vh, dpr: window.devicePixelRatio
     });
   }
 
-  // Otherwise, use document scroll if it can scroll
-  if (docCanScroll || docH > vh + 40) {
-    window.__ss_origScroll = origDocY;
-    return JSON.stringify({
-      found: true, docScroll: true, frame: 'main',
-      tag: 'DOCUMENT', id: '', cls: '',
-      rect: { top: 0, left: 0, width: vw, height: vh },
-      scrollHeight: docH, clientHeight: vh,
-      vw: vw, vh: vh, dpr: window.devicePixelRatio
-    });
-  }
-
-  return JSON.stringify({ found: false });
+  window.__ss_origScroll = origDocY;
+  return JSON.stringify({
+    found: true,
+    hasInner: false,
+    docScroll: true,
+    scrollHeight: docH,
+    clientHeight: vh,
+    vw: vw, vh: vh, dpr: window.devicePixelRatio
+  });
 })()`;
 
 const injectHideAndMonitor = `(function(){
@@ -337,7 +288,7 @@ const injectHideAndMonitor = `(function(){
   window.__ss_lastPing = Date.now();
   if(!window.__ss_interval){
      window.__ss_interval = setInterval(function(){
-        if(Date.now() - window.__ss_lastPing > 2000) {
+        if(Date.now() - window.__ss_lastPing > 3000) {
            clearInterval(window.__ss_interval);
            window.__ss_interval = null;
            var e = document.getElementById('__ss_hide'); if(e) e.remove();
@@ -346,15 +297,8 @@ const injectHideAndMonitor = `(function(){
            
            if (window.__ss_prepared && window.__ss_restorers) {
              for (var i = 0; i < window.__ss_restorers.length; i++) {
-               var item = window.__ss_restorers[i];
                try {
-                 if (item.type === 'sticky') {
-                   item.el.style.position = item.origPosition;
-                 } else if (item.type === 'fixed') {
-                   item.el.style.visibility = item.origVisibility;
-                 } else if (item.type === 'background') {
-                   item.el.style.backgroundAttachment = item.origAttachment;
-                 }
+                 window.__ss_restorers[i].el.style.visibility = window.__ss_restorers[i].origVisibility;
                } catch(e) {}
              }
              window.__ss_restorers = [];
@@ -367,7 +311,11 @@ const injectHideAndMonitor = `(function(){
 
 async function cdpCapture(tabId) {
   const notify = (status) => {
-    chrome.runtime.sendMessage({ type: 'studio:capture_progress', status });
+    try {
+      chrome.runtime.sendMessage({ type: 'studio:capture_progress', status }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch (e) {}
   };
 
   notify('Attaching debugger...');
@@ -432,32 +380,19 @@ async function cdpCapture(tabId) {
       }
     }
 
-    var elInfo = bestTarget || { found: false };
+    var elInfo = bestTarget || {
+      found: true,
+      docScroll: true,
+      scrollHeight: mainInfo.scrollH,
+      clientHeight: mainInfo.vh,
+      vw: mainInfo.vw,
+      vh: mainInfo.vh,
+      dpr: mainInfo.dpr
+    };
 
-    if (elInfo.found && elInfo.isIframe) {
+    if (elInfo.isIframe) {
         useIframe = true;
         iframeContextId = elInfo.contextId;
-        elInfo.frame = 'iframe:' + elInfo.frameId;
-        
-        try {
-          await cdpCmd(tabId, 'DOM.enable');
-          await cdpCmd(tabId, 'DOM.getDocument', {depth: -1});
-          var owner = await cdpCmd(tabId, 'DOM.getFrameOwner', { frameId: elInfo.frameId });
-          var box = await cdpCmd(tabId, 'DOM.getBoxModel', { backendNodeId: owner.backendNodeId });
-          var ifX = box.model.border[0];
-          var ifY = box.model.border[1];
-          var ifW = box.model.border[2] - box.model.border[0];
-          var ifH = box.model.border[5] - box.model.border[1];
-          
-          elInfo.rect.left += ifX;
-          elInfo.rect.top += ifY;
-          
-          if (elInfo.docScroll) {
-            elInfo.rect = { left: ifX, top: ifY, width: ifW, height: ifH };
-            elInfo.clientHeight = ifH;
-            elInfo.vw = ifW;
-          }
-        } catch(e) {}
     }
 
     async function evalInFrame(js) {
@@ -487,104 +422,60 @@ async function cdpCapture(tabId) {
 
     if (elInfo.found) {
       var si = elInfo;
-      var isDoc = si.docScroll;
-      
-      var visibleTop = Math.max(0, si.rect.top);
-      var maxVisibleHeight = mainInfo.vh - visibleTop;
-      si.clientHeight = Math.floor(Math.min(si.clientHeight, maxVisibleHeight));
       
       notify('Starting scroll capture...');
       await wait(100);
 
       // Save user's original scroll position to restore when done
-      var origScroll = await evalInFrame(isDoc
-        ? `window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0`
-        : `window.__ss_el ? window.__ss_el.scrollTop : 0`);
+      var origScroll = await evalInFrame(`(function(){
+        return window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+      })()`);
 
-      // Prepare fixed/sticky element states
+      // Prepare fixed element states (only slim headers/banners)
       await cdpEval(tabId, prepareCaptureJS);
       if (useIframe) {
         await evalInFrame(prepareCaptureJS);
       }
 
-      var step = Math.max(100, si.clientHeight - 120); // 120px overlap for seamless stitching
+      var step = Math.max(150, si.clientHeight - 120); // 120px overlap for seamless stitching
       var y = 0;
       var lastCapturedY = -1;
       var stuckCount = 0;
 
-      // FAST SINGLE-PASS CAPTURE
+      // FAST SINGLE-PASS DUAL-SCROLL CAPTURE
       while (true) {
-        if (isDoc) {
-          await evalInFrame(`window.scrollTo(0, ${y}); document.documentElement.scrollTop = ${y}; if (document.body) document.body.scrollTop = ${y};`);
-        } else {
-          await evalInFrame(`if (window.__ss_el) window.__ss_el.scrollTop = ${y}`);
+        // Scroll both document and inner element if present
+        await evalInFrame(`(function(){
+          var targetY = ${y};
+          window.scrollTo(0, targetY);
+          if (document.documentElement) document.documentElement.scrollTop = targetY;
+          if (document.body) document.body.scrollTop = targetY;
+          if (window.__ss_el) window.__ss_el.scrollTop = targetY;
+        })()`);
+
+        // 140ms compositing delay (optimal for DOM updates & MathJax/KaTeX layout)
+        await wait(140);
+
+        var actualY = await evalInFrame(`(function(){
+          var docY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+          var elY = window.__ss_el ? window.__ss_el.scrollTop : 0;
+          return Math.round(Math.max(docY, elY));
+        })()`);
+
+        // Dynamic height check (for pages that load questions or images on scroll)
+        var currentH = await evalInFrame(`(function(){
+          var docH = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+          var elH = window.__ss_el ? window.__ss_el.scrollHeight : 0;
+          return Math.max(docH, elH);
+        })()`);
+        if (currentH > si.scrollHeight) {
+          si.scrollHeight = currentH;
         }
-
-        // 120ms compositing delay (optimal with scroll-behavior: auto)
-        await wait(120);
-
-        var actualY = await evalInFrame(isDoc
-          ? `Math.round(window.scrollY || window.pageYOffset || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0)`
-          : `window.__ss_el ? Math.round(window.__ss_el.scrollTop) : 0`);
 
         // Check if we hit the bottom boundary or scrolling didn't advance
         if (y > 0 && actualY <= lastCapturedY) {
-          // If document scroll failed to advance on the very first step, dynamically fallback to inner container:
-          if (isDoc && actualY === 0 && captures.length === 1) {
-            var retryResStr = await evalInFrame(`(function(){
-              var all = document.querySelectorAll('*');
-              var best = null, maxD = 40;
-              for (var i=0; i<all.length; i++) {
-                var el = all[i];
-                if (el===document.documentElement||el===document.body) continue;
-                if (el.scrollHeight <= el.clientHeight + maxD) continue;
-                if (el.clientHeight < 120 || el.clientWidth < 180) continue;
-                var old = el.scrollTop;
-                el.scrollTop = old + 10;
-                if (el.scrollTop !== old) {
-                  el.scrollTop = old;
-                  var d = el.scrollHeight - el.clientHeight;
-                  if (d > maxD) { best = el; maxD = d; }
-                }
-              }
-              if (best) {
-                window.__ss_el = best;
-                window.__ss_origScroll = best.scrollTop;
-                var r = best.getBoundingClientRect();
-                return JSON.stringify({found:true, rect:{top:r.top,left:r.left,width:r.width,height:r.height}, scrollHeight:best.scrollHeight, clientHeight:best.clientHeight});
-              }
-              return JSON.stringify({found:false});
-            })()`);
-            try {
-              var retryObj = JSON.parse(retryResStr);
-              if (retryObj && retryObj.found) {
-                isDoc = false;
-                si.docScroll = false;
-                si.rect = retryObj.rect;
-                si.scrollHeight = retryObj.scrollHeight;
-                si.clientHeight = retryObj.clientHeight;
-                step = Math.max(100, si.clientHeight - 120);
-                y = step;
-                captures = []; // clear failed frame and restart with the real inner container
-                continue;
-              }
-            } catch(e){}
-          }
-
           stuckCount++;
-          var checkH = await evalInFrame(isDoc
-            ? `Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)`
-            : `window.__ss_el ? window.__ss_el.scrollHeight : 0`);
-          if (checkH > si.scrollHeight + 10) {
-            si.scrollHeight = checkH;
-            if (isDoc) await evalInFrame(`window.scrollTo(0, ${y}); document.documentElement.scrollTop = ${y}; if (document.body) document.body.scrollTop = ${y};`);
-            else await evalInFrame(`if (window.__ss_el) window.__ss_el.scrollTop = ${y}`);
-            await wait(120);
-            actualY = await evalInFrame(isDoc
-              ? `Math.round(window.scrollY || window.pageYOffset || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0)`
-              : `window.__ss_el ? Math.round(window.__ss_el.scrollTop) : 0`);
-          }
-          if (actualY <= lastCapturedY && stuckCount >= 2) {
+          if (stuckCount >= 2) {
             break; // Truly at bottom
           }
         } else {
@@ -595,15 +486,7 @@ async function cdpCapture(tabId) {
         captures.push({ dataUrl: 'data:image/png;base64,' + sshot.data, scrollY: actualY });
         lastCapturedY = actualY;
 
-        // Dynamic height growth check
-        var currentH = await evalInFrame(isDoc
-          ? `Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)`
-          : `window.__ss_el ? window.__ss_el.scrollHeight : 0`);
-        if (currentH > si.scrollHeight) {
-          si.scrollHeight = currentH;
-        }
-
-        // After frame 0, hide fixed headers/overlays so they don't repeat in later slices
+        // After frame 0, hide slim fixed headers so they don't repeat in later slices
         if (captures.length === 1) {
           await cdpEval(tabId, hideFixedJS);
           if (useIframe) await evalInFrame(hideFixedJS);
@@ -630,15 +513,15 @@ async function cdpCapture(tabId) {
       } catch(e) {}
 
       // Restore user's original scroll position
-      if (isDoc) {
-        await evalInFrame(`(function(){ window.scrollTo(0, ${origScroll});
-          var e=document.getElementById('__ss_hide'); if(e)e.remove(); 
-          if(window.__ss_interval) { clearInterval(window.__ss_interval); window.__ss_interval=null; } })()`);
-      } else {
-        await evalInFrame(`(function(){ if(window.__ss_el) window.__ss_el.scrollTop = ${origScroll};
-          var e=document.getElementById('__ss_hide'); if(e)e.remove();
-          if(window.__ss_interval) { clearInterval(window.__ss_interval); window.__ss_interval=null; } })()`);
-      }
+      await evalInFrame(`(function(){
+        window.scrollTo(0, ${origScroll});
+        if (window.__ss_el && window.__ss_origScroll !== undefined) {
+          window.__ss_el.scrollTop = window.__ss_origScroll;
+        }
+        var e = document.getElementById('__ss_hide'); if(e) e.remove(); 
+        if(window.__ss_interval) { clearInterval(window.__ss_interval); window.__ss_interval = null; }
+      })()`);
+
       if (useIframe) {
         await cdpEval(tabId, `(function(){ var e=document.getElementById('__ss_hide'); if(e)e.remove();
           if(window.__ss_interval) { clearInterval(window.__ss_interval); window.__ss_interval=null; } })()`);
@@ -647,16 +530,18 @@ async function cdpCapture(tabId) {
       var finalHeight = si.scrollHeight;
       if (captures.length > 0) {
         var last = captures[captures.length - 1];
-        finalHeight = last.scrollY + si.clientHeight;
+        finalHeight = Math.max(finalHeight, last.scrollY + si.clientHeight);
       }
 
-      if (isDoc && !useIframe) {
-        return {mode:'fullpage', captures, viewportWidth:si.vw, viewportHeight:si.vh,
-          totalHeight:finalHeight, totalWidth:si.vw, devicePixelRatio:si.dpr};
-      }
-      return {mode:'element', captures, elementRect:si.rect,
-        elementClientHeight:si.clientHeight, totalScrollHeight:finalHeight,
-        viewportWidth:si.vw, viewportHeight:si.vh, devicePixelRatio:si.dpr};
+      return {
+        mode: 'fullpage',
+        captures,
+        viewportWidth: si.vw,
+        viewportHeight: si.vh,
+        totalHeight: finalHeight,
+        totalWidth: si.vw,
+        devicePixelRatio: si.dpr
+      };
     } else {
       var sshot = await cdpCmd(tabId, 'Page.captureScreenshot', {format:'png'});
       captures.push({dataUrl:'data:image/png;base64,'+sshot.data, scrollY:0});

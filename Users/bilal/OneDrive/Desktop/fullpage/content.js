@@ -10,13 +10,32 @@
 
   let restorers = [];
 
+  let activeScrollContainer = null;
+
+  function getScrollContainer() {
+    const de = document.documentElement;
+    const bodyHeight = document.body ? document.body.scrollHeight : 0;
+    const docHeight = Math.max(de.scrollHeight, bodyHeight);
+    return { el: window, height: docHeight, isWindow: true };
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || !msg.type) return;
     switch (msg.type) {
       case 'fp:ping': sendResponse({ ok: true }); break;
       case 'fp:getScrollInfo': sendResponse(getScrollInfo()); break;
       case 'fp:prepare': prepare(); sendResponse({ ok: true }); break;
-      case 'fp:scrollTo': window.scrollTo(0, msg.y || 0); sendResponse({ y: window.scrollY }); break;
+      case 'fp:scrollTo': {
+        const y = msg.y || 0;
+        if (activeScrollContainer === window || !activeScrollContainer) {
+          window.scrollTo(0, y);
+          sendResponse({ y: window.scrollY });
+        } else {
+          activeScrollContainer.scrollTop = y;
+          sendResponse({ y: activeScrollContainer.scrollTop });
+        }
+        break;
+      }
       case 'fp:restore': restore(); sendResponse({ ok: true }); break;
       case 'fp:metadata': sendResponse(collectMetadata(msg.mode || 'visible')); break;
       default: break;
@@ -25,10 +44,11 @@
   });
 
   function getScrollInfo() {
-    const de = document.documentElement;
+    const container = getScrollContainer();
+    activeScrollContainer = container.isWindow ? window : container.el;
     return {
-      totalHeight: Math.max(de.scrollHeight, document.body ? document.body.scrollHeight : 0),
-      totalWidth: Math.max(de.scrollWidth, document.body ? document.body.scrollWidth : 0),
+      totalHeight: container.height,
+      totalWidth: container.isWindow ? Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0) : container.el.scrollWidth,
       viewportHeight: window.innerHeight,
       viewportWidth: window.innerWidth,
       devicePixelRatio: window.devicePixelRatio || 1
@@ -44,7 +64,15 @@
       else if (cs.position === 'sticky') { restorers.push({ el, prop: 'position', val: el.style.position }); el.style.position = 'static'; }
     }
   }
-  function restore() { for (const r of restorers) { try { r.el.style[r.prop] = r.val; } catch (e) {} } restorers = []; window.scrollTo(0, 0); }
+  function restore() {
+    for (const r of restorers) { try { r.el.style[r.prop] = r.val; } catch (e) {} }
+    restorers = [];
+    if (activeScrollContainer && activeScrollContainer !== window) {
+      activeScrollContainer.scrollTop = 0;
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }
 
   // ================= Math (no API) =================
   function collectMetadata(mode) {
@@ -60,7 +88,7 @@
     const selectors = [
       'math', '.katex', '.MathJax', 'mjx-container', '.mjx-container', '.MathJax_Display',
       '[data-mathml]', '[data-latex]', '.katex-display', 'annotation[encoding="application/x-tex"]',
-      'script[type="math/tex"]', '[role="math"]'
+      'script[type="math/tex"]', '[role="math"]', 'img.equation_image', 'img[class*="equation"]'
     ];
     const nodes = new Set();
     document.querySelectorAll(selectors.join(',')).forEach((n) => {
