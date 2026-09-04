@@ -352,19 +352,22 @@
   document.querySelectorAll('.seg-btn').forEach((b) => b.addEventListener('click', () => { document.querySelectorAll('.seg-btn').forEach((x) => x.classList.remove('active')); b.classList.add('active'); format = b.dataset.fmt; }));
 
   // Initialize slice checkbox state from settings
-  chrome.storage.local.get([SETTINGS_KEY], (d) => {
-    const s = d[SETTINGS_KEY] || {};
-    $('slice-enabled').checked = !!s.sliceEnabled;
-  });
-
-  // Save slice preference when changed
-  $('slice-enabled').addEventListener('change', () => {
+  const sliceEl = $('slice-enabled');
+  if (sliceEl) {
     chrome.storage.local.get([SETTINGS_KEY], (d) => {
       const s = d[SETTINGS_KEY] || {};
-      s.sliceEnabled = $('slice-enabled').checked;
-      chrome.storage.local.set({ [SETTINGS_KEY]: s });
+      sliceEl.checked = !!s.sliceEnabled;
     });
-  });
+
+    // Save slice preference when changed
+    sliceEl.addEventListener('change', () => {
+      chrome.storage.local.get([SETTINGS_KEY], (d) => {
+        const s = d[SETTINGS_KEY] || {};
+        s.sliceEnabled = sliceEl.checked;
+        chrome.storage.local.set({ [SETTINGS_KEY]: s });
+      });
+    });
+  }
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === 'studio:capture_progress') {

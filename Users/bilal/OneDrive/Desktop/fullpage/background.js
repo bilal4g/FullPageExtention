@@ -210,6 +210,7 @@ const restoreAllJS = `(function() {
 const findScrollableJS = `(function(){
   var vw = window.innerWidth, vh = window.innerHeight;
 
+  // 1. Calculate standard document scroll metrics
   var docH = Math.max(
     document.documentElement.scrollHeight,
     document.body ? document.body.scrollHeight : 0,
@@ -217,52 +218,70 @@ const findScrollableJS = `(function(){
     document.body ? document.body.offsetHeight : 0
   );
 
-  var origDocY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
-  window.scrollTo(0, origDocY + 20);
-  var docY2 = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
-  var docCanScroll = docY2 !== origDocY;
-  window.scrollTo(0, origDocY);
+  var origDocY = window.scrollY || (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
 
-  // Search for any inner container (Canvas LMS, SPAs, feeds, chat logs)
+  // 2. Scan ALL DOM elements to find maximum content height (e.g. Canvas quiz questions, feeds, SPAs)
   var all = document.querySelectorAll('*');
-  var bestEl = null;
-  var maxDiff = 60;
+  var maxContentH = docH;
+  var maxContentEl = null;
 
   for (var i = 0; i < all.length; i++) {
     var el = all[i];
     if (el === document.documentElement || el === document.body) continue;
-    if (el.clientHeight < 150 || el.clientWidth < 200) continue;
-    if (el.scrollHeight <= el.clientHeight + maxDiff) continue;
-
-    try {
-      var cs = window.getComputedStyle(el);
-      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-      var oy = cs.overflowY, o = cs.overflow;
-      if (oy === 'auto' || oy === 'scroll' || oy === 'overlay' || o === 'auto' || o === 'scroll' || o === 'overlay') {
-        var oldTop = el.scrollTop;
-        el.scrollTop = oldTop + 20;
-        var moved = el.scrollTop !== oldTop;
-        el.scrollTop = oldTop;
-        if (moved) {
-          var diff = el.scrollHeight - el.clientHeight;
-          if (diff > maxDiff) {
-            bestEl = el;
-            maxDiff = diff;
-          }
-        }
-      }
-    } catch(e){}
+    if (el.clientWidth < vw * 0.25 || el.clientHeight < 100) continue;
+    if (el.scrollHeight > maxContentH + 50) {
+      maxContentH = el.scrollHeight;
+      maxContentEl = el;
+    }
   }
 
-  var docOverflow = Math.max(0, docH - vh);
-  if (bestEl && (!docCanScroll || maxDiff > docOverflow)) {
+  // 3. Find candidate scroll container
+  var bestEl = null;
+  if (maxContentEl && maxContentH > docH + 50) {
+    // Trace up from maxContentEl to find the scrollable container or use maxContentEl directly
+    var cur = maxContentEl;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      var cs = window.getComputedStyle(cur);
+      var oy = cs.overflowY, o = cs.overflow;
+      if (oy === 'auto' || oy === 'scroll' || oy === 'overlay' || o === 'auto' || o === 'scroll' || o === 'overlay' || cur.scrollHeight > cur.clientHeight + 50) {
+        bestEl = cur;
+        break;
+      }
+      cur = cur.parentElement;
+    }
+    if (!bestEl) bestEl = maxContentEl;
+  } else {
+    // Check for standard inner scrollables with overflow
+    var maxDiff = 60;
+    for (var j = 0; j < all.length; j++) {
+      var e = all[j];
+      if (e === document.documentElement || e === document.body) continue;
+      if (e.clientHeight < 150 || e.clientWidth < 200) continue;
+      if (e.scrollHeight <= e.clientHeight + maxDiff) continue;
+      try {
+        var style = window.getComputedStyle(e);
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+        var yFlow = style.overflowY, allFlow = style.overflow;
+        if (yFlow === 'auto' || yFlow === 'scroll' || yFlow === 'overlay' || allFlow === 'auto' || allFlow === 'scroll' || allFlow === 'overlay') {
+          var diff = e.scrollHeight - e.clientHeight;
+          if (diff > maxDiff) {
+            bestEl = e;
+            maxDiff = diff;
+            maxContentH = Math.max(maxContentH, e.scrollHeight);
+          }
+        }
+      } catch(err) {}
+    }
+  }
+
+  if (bestEl) {
     window.__ss_el = bestEl;
     window.__ss_origScroll = bestEl.scrollTop;
     return JSON.stringify({
       found: true,
       hasInner: true,
-      docScroll: docCanScroll,
-      scrollHeight: Math.max(docH, bestEl.scrollHeight),
+      docScroll: true,
+      scrollHeight: maxContentH,
       clientHeight: vh,
       vw: vw, vh: vh, dpr: window.devicePixelRatio
     });
@@ -356,28 +375,32 @@ async function cdpCapture(tabId) {
     var useIframe = false;
     var iframeContextId = null;
 
-    // Check child frames if no target was found, or if an iframe might have more scroll height
-    if ((!bestTarget || bestTarget.scrollHeight <= mainInfo.vh + 50) &&
-        frameTree && frameTree.frameTree && frameTree.frameTree.childFrames) {
-      for (var cf of frameTree.frameTree.childFrames) {
+    // RECURSIVELY check ALL child frames to see if an iframe has more scrollable content (e.g. Canvas LMS, SpeedGrader, LTI quizzes)
+    async function inspectFrames(frames) {
+      if (!frames || !frames.length) return;
+      for (var cf of frames) {
         try {
           var world = await cdpCmd(tabId, 'Page.createIsolatedWorld', { frameId: cf.frame.id, worldName: 'snapscroll' });
           var ctxId = world.executionContextId;
           var iframeResStr = await cdpCmd(tabId, 'Runtime.evaluate', { expression: findScrollableJS, contextId: ctxId, returnByValue: true });
-          
           if (iframeResStr.result && iframeResStr.result.value) {
-             var parsed = JSON.parse(iframeResStr.result.value);
-             if (parsed.found) {
-                if (!bestTarget || parsed.scrollHeight > bestTarget.scrollHeight) {
-                   bestTarget = parsed;
-                   bestTarget.contextId = ctxId;
-                   bestTarget.isIframe = true;
-                   bestTarget.frameId = cf.frame.id;
-                }
-             }
+            var parsed = JSON.parse(iframeResStr.result.value);
+            if (parsed.found && (!bestTarget || parsed.scrollHeight > bestTarget.scrollHeight)) {
+              bestTarget = parsed;
+              bestTarget.contextId = ctxId;
+              bestTarget.isIframe = true;
+              bestTarget.frameId = cf.frame.id;
+            }
           }
-        } catch(e){}
+        } catch(e) {}
+        if (cf.childFrames && cf.childFrames.length) {
+          await inspectFrames(cf.childFrames);
+        }
       }
+    }
+
+    if (frameTree && frameTree.frameTree && frameTree.frameTree.childFrames) {
+      await inspectFrames(frameTree.frameTree.childFrames);
     }
 
     var elInfo = bestTarget || {
@@ -428,7 +451,7 @@ async function cdpCapture(tabId) {
 
       // Save user's original scroll position to restore when done
       var origScroll = await evalInFrame(`(function(){
-        return window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+        return window.scrollY || (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
       })()`);
 
       // Prepare fixed element states (only slim headers/banners)
@@ -448,25 +471,41 @@ async function cdpCapture(tabId) {
         await evalInFrame(`(function(){
           var targetY = ${y};
           window.scrollTo(0, targetY);
+          if (document.scrollingElement) document.scrollingElement.scrollTop = targetY;
           if (document.documentElement) document.documentElement.scrollTop = targetY;
           if (document.body) document.body.scrollTop = targetY;
-          if (window.__ss_el) window.__ss_el.scrollTop = targetY;
+          if (window.__ss_el) {
+            window.__ss_el.scrollTop = targetY;
+            if (window.__ss_el.parentElement) window.__ss_el.parentElement.scrollTop = targetY;
+          }
         })()`);
+
+        if (useIframe) {
+          try {
+            await cdpEval(tabId, `window.scrollTo(0, ${y}); if (document.scrollingElement) document.scrollingElement.scrollTop = ${y}; if (document.documentElement) document.documentElement.scrollTop = ${y};`);
+          } catch(e) {}
+        }
 
         // 140ms compositing delay (optimal for DOM updates & MathJax/KaTeX layout)
         await wait(140);
 
         var actualY = await evalInFrame(`(function(){
-          var docY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+          var docY = window.scrollY || (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
           var elY = window.__ss_el ? window.__ss_el.scrollTop : 0;
-          return Math.round(Math.max(docY, elY));
+          var parentY = (window.__ss_el && window.__ss_el.parentElement) ? window.__ss_el.parentElement.scrollTop : 0;
+          return Math.round(Math.max(docY, elY, parentY));
         })()`);
 
         // Dynamic height check (for pages that load questions or images on scroll)
         var currentH = await evalInFrame(`(function(){
           var docH = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
           var elH = window.__ss_el ? window.__ss_el.scrollHeight : 0;
-          return Math.max(docH, elH);
+          var maxH = Math.max(docH, elH);
+          var all = document.querySelectorAll('*');
+          for (var i = 0; i < all.length; i++) {
+            if (all[i].scrollHeight > maxH) maxH = all[i].scrollHeight;
+          }
+          return maxH;
         })()`);
         if (currentH > si.scrollHeight) {
           si.scrollHeight = currentH;
@@ -474,9 +513,25 @@ async function cdpCapture(tabId) {
 
         // Check if we hit the bottom boundary or scrolling didn't advance
         if (y > 0 && actualY <= lastCapturedY) {
-          stuckCount++;
-          if (stuckCount >= 2) {
-            break; // Truly at bottom
+          // Fallback: try relative scrollBy
+          await evalInFrame(`(function(){
+            window.scrollBy(0, ${step});
+            if (window.__ss_el) window.__ss_el.scrollBy(0, ${step});
+          })()`);
+          await wait(100);
+          actualY = await evalInFrame(`(function(){
+            var docY = window.scrollY || (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+            var elY = window.__ss_el ? window.__ss_el.scrollTop : 0;
+            return Math.round(Math.max(docY, elY));
+          })()`);
+
+          if (actualY <= lastCapturedY) {
+            stuckCount++;
+            if (stuckCount >= 2) {
+              break; // Truly at bottom
+            }
+          } else {
+            stuckCount = 0;
           }
         } else {
           stuckCount = 0;
