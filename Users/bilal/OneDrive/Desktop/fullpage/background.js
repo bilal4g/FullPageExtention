@@ -235,11 +235,86 @@ const restoreAllJS = `(function() {
 
 const findScrollableJS = `(function(){
   var vw = window.innerWidth, vh = window.innerHeight;
-  var docH = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
-  var origDocY = window.scrollY || document.documentElement.scrollTop || 0;
 
-  // Fast-path: If main page is scrollable, use document scrolling directly without DOM scanning
-  if (docH > vh + 50) {
+  function canElScroll(el) {
+    if (!el) return false;
+    var old = el.scrollTop;
+    el.scrollTop = old + 10;
+    var moved = el.scrollTop !== old;
+    el.scrollTop = old;
+    if (!moved) {
+      el.scrollTop = old - 10;
+      moved = el.scrollTop !== old;
+      el.scrollTop = old;
+    }
+    return moved;
+  }
+
+  function canDocScroll() {
+    var orig = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+    if (orig > 0) return true;
+    window.scrollBy(0, 10);
+    var newY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+    if (newY !== orig) {
+      window.scrollTo(0, orig);
+      return true;
+    }
+    window.scrollBy(0, -10);
+    newY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+    if (newY !== orig) {
+      window.scrollTo(0, orig);
+      return true;
+    }
+    return false;
+  }
+
+  // 1. Search for inner scrollable containers (e.g. Canvas LMS, SPAs, feeds)
+  var allEls = document.querySelectorAll('*');
+  var bestEl = null;
+  var maxDiff = 40; // minimum overflow to consider scrollable
+
+  for (var i = 0; i < allEls.length; i++) {
+    var el = allEls[i];
+    if (el === document.documentElement || el === document.body) continue;
+    if (el.clientHeight < 120 || el.clientWidth < 180) continue;
+    if (el.scrollHeight <= el.clientHeight + maxDiff) continue;
+
+    try {
+      var cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      var oy = cs.overflowY, o = cs.overflow;
+      if (oy === 'auto' || oy === 'scroll' || oy === 'overlay' || o === 'auto' || o === 'scroll' || o === 'overlay') {
+        if (canElScroll(el)) {
+          var diff = el.scrollHeight - el.clientHeight;
+          if (diff > maxDiff) {
+            bestEl = el;
+            maxDiff = diff;
+          }
+        }
+      }
+    } catch(e){}
+  }
+
+  var docH = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+  var docCanScroll = canDocScroll();
+  var origDocY = window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+
+  // If an inner element can scroll and has more scrollable content than window (or window cannot scroll):
+  if (bestEl && (!docCanScroll || maxDiff > (docH - vh))) {
+    window.__ss_el = bestEl;
+    window.__ss_origScroll = bestEl.scrollTop;
+    var r = bestEl.getBoundingClientRect();
+    return JSON.stringify({
+      found: true, docScroll: false, frame: 'main',
+      tag: bestEl.tagName, id: bestEl.id || '', cls: (bestEl.className || '').toString().slice(0, 60),
+      rect: { top: r.top, left: r.left, width: r.width, height: r.height },
+      scrollHeight: bestEl.scrollHeight, clientHeight: bestEl.clientHeight,
+      vw: vw, vh: vh, dpr: window.devicePixelRatio
+    });
+  }
+
+  // Otherwise, use document scroll if it can scroll
+  if (docCanScroll || docH > vh + 40) {
     window.__ss_origScroll = origDocY;
     return JSON.stringify({
       found: true, docScroll: true, frame: 'main',
@@ -250,82 +325,7 @@ const findScrollableJS = `(function(){
     });
   }
 
-  function isInvalidTarget(el) {
-    try {
-      var cs = getComputedStyle(el);
-      var pos = cs.position;
-      if (pos === 'fixed' || pos === 'sticky') return true;
-      if (el.clientWidth < vw * 0.4 || el.clientHeight < vh * 0.4) return true;
-    } catch(e) {}
-    return false;
-  }
-
-  function canScroll(el) {
-    var old = el.scrollTop;
-    el.scrollTop = old + 10;
-    if (el.scrollTop !== old) { el.scrollTop = old; return true; }
-    el.scrollTop = old - 10;
-    if (el.scrollTop !== old) { el.scrollTop = old; return true; }
-    return false;
-  }
-
-  function hasScrollableAncestor(el) {
-    var p = el.parentElement;
-    while (p && p !== document.documentElement && p !== document.body) {
-      try {
-        var cs = getComputedStyle(p);
-        var oy = cs.overflowY, o = cs.overflow;
-        if ((oy==='auto'||oy==='scroll'||oy==='overlay'||o==='auto'||o==='scroll'||o==='overlay')
-            && p.scrollHeight > p.clientHeight + 5) {
-          return true;
-        }
-      } catch(e){}
-      p = p.parentElement;
-    }
-    return false;
-  }
-
-  var candidates = document.querySelectorAll('main, [role="main"], article, section, [class*="content"], [class*="scroll"], [class*="body"], [class*="container"], [class*="pane"], div');
-  var best = null, bestArea = 0;
-  for (var i = 0; i < candidates.length; i++) {
-    var el = candidates[i];
-    if (el === document.documentElement || el === document.body) continue;
-    if (el.scrollHeight <= el.clientHeight + 10 || el.clientHeight < 50 || el.clientWidth < 100) continue;
-    if (isInvalidTarget(el)) continue;
-    try {
-      var cs = getComputedStyle(el);
-      var oy = cs.overflowY, o = cs.overflow;
-      if (oy==='auto'||oy==='scroll'||oy==='overlay'||o==='auto'||o==='scroll'||o==='overlay') {
-        var area = el.clientWidth * el.clientHeight;
-        if (area > bestArea && canScroll(el) && !hasScrollableAncestor(el)) {
-          bestArea = area;
-          best = el;
-        }
-      }
-    } catch(e){}
-  }
-
-  if (best) {
-    window.__ss_el = best;
-    window.__ss_origScroll = best.scrollTop;
-    var r = best.getBoundingClientRect();
-    return JSON.stringify({
-      found: true, docScroll: false, frame: 'main',
-      tag: best.tagName, id: best.id || '', cls: (best.className || '').toString().slice(0, 60),
-      rect: { top: r.top, left: r.left, width: r.width, height: r.height },
-      scrollHeight: best.scrollHeight, clientHeight: best.clientHeight,
-      vw: vw, vh: vh, dpr: window.devicePixelRatio
-    });
-  }
-
-  window.__ss_origScroll = origDocY;
-  return JSON.stringify({
-    found: true, docScroll: true, frame: 'main',
-    tag: 'DOCUMENT', id: '', cls: '',
-    rect: { top: 0, left: 0, width: vw, height: vh },
-    scrollHeight: docH, clientHeight: vh,
-    vw: vw, vh: vh, dpr: window.devicePixelRatio
-  });
+  return JSON.stringify({ found: false });
 })()`;
 
 const injectHideAndMonitor = `(function(){
@@ -408,8 +408,8 @@ async function cdpCapture(tabId) {
     var useIframe = false;
     var iframeContextId = null;
 
-    // Only probe child frames if the main document is NOT scrollable
-    if ((!bestTarget || (bestTarget.docScroll && mainInfo.scrollH <= mainInfo.clientH + 50)) &&
+    // Check child frames if no target was found, or if an iframe might have more scroll height
+    if ((!bestTarget || bestTarget.scrollHeight <= mainInfo.vh + 50) &&
         frameTree && frameTree.frameTree && frameTree.frameTree.childFrames) {
       for (var cf of frameTree.frameTree.childFrames) {
         try {
@@ -498,7 +498,7 @@ async function cdpCapture(tabId) {
 
       // Save user's original scroll position to restore when done
       var origScroll = await evalInFrame(isDoc
-        ? `window.scrollY || document.documentElement.scrollTop || 0`
+        ? `window.scrollY || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0`
         : `window.__ss_el ? window.__ss_el.scrollTop : 0`);
 
       // Prepare fixed/sticky element states
@@ -510,11 +510,12 @@ async function cdpCapture(tabId) {
       var step = Math.max(100, si.clientHeight - 120); // 120px overlap for seamless stitching
       var y = 0;
       var lastCapturedY = -1;
+      var stuckCount = 0;
 
-      // FAST SINGLE-PASS CAPTURE (Zero pre-scroll pass, zero backup scroll!)
+      // FAST SINGLE-PASS CAPTURE
       while (true) {
         if (isDoc) {
-          await evalInFrame(`window.scrollTo(0, ${y})`);
+          await evalInFrame(`window.scrollTo(0, ${y}); document.documentElement.scrollTop = ${y}; if (document.body) document.body.scrollTop = ${y};`);
         } else {
           await evalInFrame(`if (window.__ss_el) window.__ss_el.scrollTop = ${y}`);
         }
@@ -523,26 +524,71 @@ async function cdpCapture(tabId) {
         await wait(120);
 
         var actualY = await evalInFrame(isDoc
-          ? `Math.round(window.scrollY || window.pageYOffset || 0)`
+          ? `Math.round(window.scrollY || window.pageYOffset || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0)`
           : `window.__ss_el ? Math.round(window.__ss_el.scrollTop) : 0`);
 
-        // Check if we hit the bottom boundary and scrolling didn't advance
-        if (y > 0 && actualY === lastCapturedY) {
+        // Check if we hit the bottom boundary or scrolling didn't advance
+        if (y > 0 && actualY <= lastCapturedY) {
+          // If document scroll failed to advance on the very first step, dynamically fallback to inner container:
+          if (isDoc && actualY === 0 && captures.length === 1) {
+            var retryResStr = await evalInFrame(`(function(){
+              var all = document.querySelectorAll('*');
+              var best = null, maxD = 40;
+              for (var i=0; i<all.length; i++) {
+                var el = all[i];
+                if (el===document.documentElement||el===document.body) continue;
+                if (el.scrollHeight <= el.clientHeight + maxD) continue;
+                if (el.clientHeight < 120 || el.clientWidth < 180) continue;
+                var old = el.scrollTop;
+                el.scrollTop = old + 10;
+                if (el.scrollTop !== old) {
+                  el.scrollTop = old;
+                  var d = el.scrollHeight - el.clientHeight;
+                  if (d > maxD) { best = el; maxD = d; }
+                }
+              }
+              if (best) {
+                window.__ss_el = best;
+                window.__ss_origScroll = best.scrollTop;
+                var r = best.getBoundingClientRect();
+                return JSON.stringify({found:true, rect:{top:r.top,left:r.left,width:r.width,height:r.height}, scrollHeight:best.scrollHeight, clientHeight:best.clientHeight});
+              }
+              return JSON.stringify({found:false});
+            })()`);
+            try {
+              var retryObj = JSON.parse(retryResStr);
+              if (retryObj && retryObj.found) {
+                isDoc = false;
+                si.docScroll = false;
+                si.rect = retryObj.rect;
+                si.scrollHeight = retryObj.scrollHeight;
+                si.clientHeight = retryObj.clientHeight;
+                step = Math.max(100, si.clientHeight - 120);
+                y = step;
+                captures = []; // clear failed frame and restart with the real inner container
+                continue;
+              }
+            } catch(e){}
+          }
+
+          stuckCount++;
           var checkH = await evalInFrame(isDoc
             ? `Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)`
             : `window.__ss_el ? window.__ss_el.scrollHeight : 0`);
           if (checkH > si.scrollHeight + 10) {
             si.scrollHeight = checkH;
-            if (isDoc) await evalInFrame(`window.scrollTo(0, ${y})`);
+            if (isDoc) await evalInFrame(`window.scrollTo(0, ${y}); document.documentElement.scrollTop = ${y}; if (document.body) document.body.scrollTop = ${y};`);
             else await evalInFrame(`if (window.__ss_el) window.__ss_el.scrollTop = ${y}`);
-            await wait(100);
+            await wait(120);
             actualY = await evalInFrame(isDoc
-              ? `Math.round(window.scrollY || window.pageYOffset || 0)`
+              ? `Math.round(window.scrollY || window.pageYOffset || document.documentElement.scrollTop || (document.body ? document.body.scrollTop : 0) || 0)`
               : `window.__ss_el ? Math.round(window.__ss_el.scrollTop) : 0`);
-            if (actualY === lastCapturedY) break; // Truly at bottom
-          } else {
+          }
+          if (actualY <= lastCapturedY && stuckCount >= 2) {
             break; // Truly at bottom
           }
+        } else {
+          stuckCount = 0;
         }
 
         var sshot = await cdpCmd(tabId, 'Page.captureScreenshot', { format: 'png' });
@@ -567,7 +613,7 @@ async function cdpCapture(tabId) {
         notify(`Section ${captures.length} of ~${estTotal}...`);
 
         // If actual viewport reached or passed document bottom, we are done!
-        if (actualY + si.clientHeight >= si.scrollHeight) {
+        if (actualY > 0 && actualY + si.clientHeight >= si.scrollHeight) {
           break;
         }
 
